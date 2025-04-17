@@ -10,6 +10,9 @@ import { z } from "zod";
 import { Client, ClientChannel } from "ssh2";
 import { parseArgs } from "node:util";
 
+// 版本号
+const version = "1.0.3";
+
 /**
  * SSH连接配置接口
  */
@@ -17,13 +20,15 @@ interface SSHConfig {
   host: string;
   port: number;
   username: string;
-  password: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
 }
 
 /**
  * 日志级别
  */
-type LogLevel = 'info' | 'error' | 'debug';
+type LogLevel = "info" | "error" | "debug";
 
 /**
  * SSH连接管理器类
@@ -95,7 +100,34 @@ class SSHConnectionManager {
         Logger.log("SSH连接已关闭", "info");
       });
 
-      this.client.connect(config);
+      const sshConfig: any = {
+        host: config.host,
+        port: config.port,
+        username: config.username,
+      };
+
+      // 配置认证方式：使用私钥或密码
+      if (config.privateKey) {
+        try {
+          const fs = require("fs");
+          sshConfig.privateKey = fs.readFileSync(config.privateKey, "utf8");
+          if (config.passphrase) {
+            sshConfig.passphrase = config.passphrase;
+          }
+          Logger.log("使用SSH私钥认证", "info");
+        } catch (err) {
+          return reject(
+            new Error(`读取私钥文件失败: ${(err as Error).message}`)
+          );
+        }
+      } else if (config.password) {
+        sshConfig.password = config.password;
+        Logger.log("使用密码认证", "info");
+      } else {
+        return reject(new Error("未提供有效的认证方式（密码或私钥）"));
+      }
+
+      this.client.connect(sshConfig);
     });
   }
 
@@ -112,28 +144,36 @@ class SSHConnectionManager {
     }
 
     return new Promise<string>((resolve, reject) => {
-      this.client!.exec(cmdString, (err: Error | undefined, stream: ClientChannel) => {
-        if (err) {
-          return reject(new Error(`执行命令错误: ${err.message}`));
-        }
-        
-        let data = "";
-        let errorData = "";
-        
-        stream.on("data", (chunk: Buffer) => (data += chunk.toString()));
-        stream.stderr.on("data", (chunk: Buffer) => (errorData += chunk.toString()));
-        
-        stream.on("close", (code: number) => {
-          if (code !== 0) {
-            return reject(new Error(`命令执行失败，退出码: ${code}, 错误: ${errorData}`));
+      this.client!.exec(
+        cmdString,
+        (err: Error | undefined, stream: ClientChannel) => {
+          if (err) {
+            return reject(new Error(`执行命令错误: ${err.message}`));
           }
-          resolve(data);
-        });
-        
-        stream.on("error", (err: Error) => {
-          reject(new Error(`流错误: ${err.message}`));
-        });
-      });
+
+          let data = "";
+          let errorData = "";
+
+          stream.on("data", (chunk: Buffer) => (data += chunk.toString()));
+          stream.stderr.on(
+            "data",
+            (chunk: Buffer) => (errorData += chunk.toString())
+          );
+
+          stream.on("close", (code: number) => {
+            if (code !== 0) {
+              return reject(
+                new Error(`命令执行失败，退出码: ${code}, 错误: ${errorData}`)
+              );
+            }
+            resolve(data);
+          });
+
+          stream.on("error", (err: Error) => {
+            reject(new Error(`流错误: ${err.message}`));
+          });
+        }
+      );
     });
   }
 
@@ -156,18 +196,18 @@ class Logger {
   /**
    * 记录日志
    */
-  public static log(message: string, level: LogLevel = 'info'): void {
+  public static log(message: string, level: LogLevel = "info"): void {
     const timestamp = new Date().toISOString();
     const formattedMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
-    
+
     switch (level) {
-      case 'error':
+      case "error":
         console.error(formattedMessage);
         break;
-      case 'debug':
+      case "debug":
         console.debug(formattedMessage);
         break;
-      case 'info':
+      case "info":
       default:
         console.info(formattedMessage);
         break;
@@ -177,16 +217,20 @@ class Logger {
   /**
    * 处理错误
    */
-  public static handleError(error: unknown, prefix: string = "", exit: boolean = false): string {
+  public static handleError(
+    error: unknown,
+    prefix: string = "",
+    exit: boolean = false
+  ): string {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const fullMessage = prefix ? `${prefix}: ${errorMessage}` : errorMessage;
-    
-    Logger.log(fullMessage, 'error');
-    
+
+    Logger.log(fullMessage, "error");
+
     if (exit) {
       process.exit(1);
     }
-    
+
     return fullMessage;
   }
 }
@@ -203,11 +247,13 @@ class CommandLineParser {
       const { values, positionals } = parseArgs({
         args: process.argv.slice(2),
         options: {
-          host: { type: 'string', short: 'h' },
-          port: { type: 'string', short: 'p' },
-          username: { type: 'string', short: 'u' },
-          password: { type: 'string', short: 'w' },
-          help: { type: 'boolean', short: '?' },
+          host: { type: "string", short: "h" },
+          port: { type: "string", short: "p" },
+          username: { type: "string", short: "u" },
+          password: { type: "string", short: "w" },
+          privateKey: { type: "string", short: "k" },
+          passphrase: { type: "string", short: "P" },
+          help: { type: "boolean", short: "?" },
         },
         allowPositionals: true,
       });
@@ -222,9 +268,11 @@ class CommandLineParser {
       const portStr = values.port || positionals[1];
       const username = values.username || positionals[2];
       const password = values.password || positionals[3];
+      const privateKey = values.privateKey;
+      const passphrase = values.passphrase;
 
-      if (!host || !portStr || !username || !password) {
-        throw new Error("缺少必要参数");
+      if (!host || !portStr || !username || (!password && !privateKey)) {
+        throw new Error("缺少必要参数，需要提供主机、端口、用户名和密码或私钥");
       }
 
       const port = parseInt(portStr, 10);
@@ -232,7 +280,7 @@ class CommandLineParser {
         throw new Error("端口必须是有效的数字");
       }
 
-      return { host, port, username, password };
+      return { host, port, username, password, privateKey, passphrase };
     } catch (error) {
       Logger.handleError(error, "参数解析错误");
       CommandLineParser.printHelp();
@@ -252,13 +300,18 @@ SSH MCP 服务器 - 使用方法:
   -p, --port      SSH 服务器端口
   -u, --username  SSH 用户名
   -w, --password  SSH 密码
+  -k, --privateKey SSH 私钥文件路径
+  -P, --passphrase 私钥密码（如果有的话）
   -?, --help      显示帮助信息
 
 示例:
-  命名参数: 
+  使用密码: 
     ssh-mcp-server --host 192.168.1.1 --port 22 --username root --password secret
   
-  位置参数: 
+  使用私钥: 
+    ssh-mcp-server --host 192.168.1.1 --port 22 --username root --privateKey ~/.ssh/id_rsa
+
+  位置参数（仅密码模式）: 
     ssh-mcp-server 192.168.1.1 22 root secret
     `);
   }
@@ -274,9 +327,9 @@ class MCPServer {
   constructor() {
     this.server = new McpServer({
       name: "ssh-mcp-server",
-      version: "1.0.2",
+      version,
     });
-    
+
     this.sshManager = SSHConnectionManager.getInstance();
   }
 
@@ -315,23 +368,23 @@ class MCPServer {
       // 初始化SSH配置
       const sshConfig = CommandLineParser.parseArgs();
       this.sshManager.setConfig(sshConfig);
-      
+
       // 预连接SSH服务器
       await this.sshManager.connect();
-      
+
       // 注册工具
       this.registerTools();
-      
+
       // 创建传输实例并连接
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
-      
+
       Logger.log("MCP服务器连接已建立");
       Logger.log("SSH MCP Server正在stdio传输模式下运行...");
-      
+
       // 处理进程退出
-      process.on('SIGINT', this.handleExit.bind(this));
-      process.on('SIGTERM', this.handleExit.bind(this));
+      process.on("SIGINT", this.handleExit.bind(this));
+      process.on("SIGTERM", this.handleExit.bind(this));
     } catch (error: unknown) {
       Logger.handleError(error, "初始化失败", true);
     }
