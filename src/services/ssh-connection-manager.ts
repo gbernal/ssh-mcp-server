@@ -1,6 +1,8 @@
 import { Client, ClientChannel } from "ssh2";
 import { SSHConfig } from "../models/types.js";
 import { Logger } from "../utils/logger.js";
+import fs from "fs";
+import { SFTPWrapper } from "ssh2";
 
 /**
  * SSH连接管理器类
@@ -104,9 +106,10 @@ export class SSHConnectionManager {
   }
 
   /**
-   * 执行SSH命令
+   * 确保SSH客户端已连接
+   * @private
    */
-  public async executeCommand(cmdString: string): Promise<string> {
+  private async ensureConnected(): Promise<Client> {
     if (!this.connected || !this.client) {
       await this.connect();
     }
@@ -115,8 +118,17 @@ export class SSHConnectionManager {
       throw new Error("SSH客户端未初始化");
     }
 
+    return this.client;
+  }
+
+  /**
+   * 执行SSH命令
+   */
+  public async executeCommand(cmdString: string): Promise<string> {
+    const client = await this.ensureConnected();
+
     return new Promise<string>((resolve, reject) => {
-      this.client!.exec(
+      client.exec(
         cmdString,
         (err: Error | undefined, stream: ClientChannel) => {
           if (err) {
@@ -146,6 +158,34 @@ export class SSHConnectionManager {
           });
         }
       );
+    });
+  }
+
+  /**
+   * 上传文件
+   */
+  public async upload(localPath: string, remotePath: string): Promise<string> {
+    const client = await this.ensureConnected();
+
+    return new Promise<string>((resolve, reject) => {
+      client.sftp((err: Error | undefined, sftp: SFTPWrapper) => {
+        if (err) {
+          return reject(new Error(`SFTP连接失败: ${err.message}`));
+        }
+
+        const readStream = fs.createReadStream(localPath);
+        const writeStream = sftp.createWriteStream(remotePath);
+
+        readStream.pipe(writeStream);
+        
+        readStream.on("end", () => {
+          resolve("文件上传成功");
+        });
+
+        readStream.on("error", (err: Error) => {
+          reject(new Error(`文件上传失败: ${err.message}`));
+        });
+      });
     });
   }
 

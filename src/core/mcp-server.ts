@@ -15,7 +15,7 @@ export class SshMcpServer {
   constructor() {
     this.server = new McpServer({
       name: "ssh-mcp-server",
-      version: "1.0.4",
+      version: "1.0.5",
     });
 
     this.sshManager = SSHConnectionManager.getInstance();
@@ -39,6 +39,29 @@ export class SshMcpServer {
           };
         } catch (error: unknown) {
           const errorMessage = Logger.handleError(error, "执行命令失败");
+          return {
+            content: [{ type: "text", text: errorMessage }],
+            isError: true,
+          };
+        }
+      }
+    );
+
+    this.server.tool(
+      "upload",
+      "上传文件到已连接的服务器",
+      {
+        localPath: z.string().describe("本地路径"),
+        remotePath: z.string().describe("远程路径"),
+      },
+      async ({ localPath, remotePath }) => {
+        try {
+          const result = await this.sshManager.upload(localPath, remotePath);
+          return {
+            content: [{ type: "text", text: result }],
+          };
+        } catch (error: unknown) {
+          const errorMessage = Logger.handleError(error, "上传文件失败");
           return {
             content: [{ type: "text", text: errorMessage }],
             isError: true,
