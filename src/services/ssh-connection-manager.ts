@@ -83,7 +83,6 @@ export class SSHConnectionManager {
       // 配置认证方式：使用私钥或密码
       if (config.privateKey) {
         try {
-          const fs = require("fs");
           sshConfig.privateKey = fs.readFileSync(config.privateKey, "utf8");
           if (config.passphrase) {
             sshConfig.passphrase = config.passphrase;

@@ -7,12 +7,8 @@ import { Logger } from "./utils/logger.js";
  * 主程序入口
  */
 async function main(): Promise<void> {
-  try {
-    const sshMcpServer = new SshMcpServer();
-    await sshMcpServer.run();
-  } catch (error: unknown) {
-    Logger.handleError(error, "运行服务器失败", true);
-  }
+  const sshMcpServer = new SshMcpServer();
+  await sshMcpServer.run();
 }
 
-main().catch((error) => Logger.handleError(error, "未捕获的错误", true));
+main().catch((error) => Logger.handleError(error, "【SSH MCP Server 错误】", true));
