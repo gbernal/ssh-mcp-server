@@ -1,6 +1,6 @@
 {
   "name": "@fangjunjie/ssh-mcp-server",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "基于 SSH 的 MCP 服务器",
   "main": "build/index.js",
   "type": "module",
@@ -21,7 +21,7 @@
   "author": "Junki",
   "license": "ISC",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.9.0",
     "ssh2": "^1.16.0",
     "zod": "^3.24.2"
   },
