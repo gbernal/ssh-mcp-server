@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerExecuteCommandTool } from "./execute-command.js";
 import { registerUploadTool } from "./upload.js";
+import { registerDownloadTool } from "./download.js";
 
 /**
  * 注册所有工具
@@ -9,4 +10,5 @@ import { registerUploadTool } from "./upload.js";
 export function registerAllTools(server: McpServer): void {
   registerExecuteCommandTool(server);
   registerUploadTool(server);
+  registerDownloadTool(server);
 } 

@@ -15,7 +15,7 @@ export class SshMcpServer {
   constructor() {
     this.server = new McpServer({
       name: "ssh-mcp-server",
-      version: "1.0.5",
+      version: "1.0.6",
     });
 
     this.sshManager = SSHConnectionManager.getInstance();

@@ -189,6 +189,38 @@ export class SSHConnectionManager {
   }
 
   /**
+   * 下载文件
+   */
+  public async download(remotePath: string, localPath: string): Promise<string> {
+    const client = await this.ensureConnected();
+
+    return new Promise<string>((resolve, reject) => {
+      client.sftp((err: Error | undefined, sftp: SFTPWrapper) => {
+        if (err) {
+          return reject(new Error(`SFTP连接失败: ${err.message}`));
+        }
+
+        const readStream = sftp.createReadStream(remotePath);
+        const writeStream = fs.createWriteStream(localPath);
+
+        readStream.pipe(writeStream);
+        
+        writeStream.on("finish", () => {
+          resolve("文件下载成功");
+        });
+
+        readStream.on("error", (err: Error) => {
+          reject(new Error(`文件下载失败: ${err.message}`));
+        });
+
+        writeStream.on("error", (err: Error) => {
+          reject(new Error(`保存文件失败: ${err.message}`));
+        });
+      });
+    });
+  }
+
+  /**
    * 断开SSH连接
    */
   public disconnect(): void {
