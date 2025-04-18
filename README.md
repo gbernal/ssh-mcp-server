@@ -22,13 +22,14 @@ ssh-mcp-server 是一个桥接工具，可以让 AI 助手等支持 MCP 协议�
 
 ```text
 选项:
-  -h, --host      SSH 服务器主机地址
-  -p, --port      SSH 服务器端口
-  -u, --username  SSH 用户名
-  -w, --password  SSH 密码
-  -k, --privateKey SSH 私钥文件路径
-  -P, --passphrase 私钥密码（如果有的话）
-  -?, --help      显示帮助信息
+  -h, --host          SSH 服务器主机地址
+  -p, --port          SSH 服务器端口
+  -u, --username      SSH 用户名
+  -w, --password      SSH 密码
+  -k, --privateKey    SSH 私钥文件路径
+  -P, --passphrase    私钥密码（如果有的话）
+  -W, --whitelist     命令白名单，以逗号分隔的正则表达式
+  -B, --blacklist     命令黑名单，以逗号分隔的正则表达式
 ```
 
 #### 使用密码
@@ -91,6 +92,54 @@ ssh-mcp-server 是一个桥接工具，可以让 AI 助手等支持 MCP 协议�
   }
 }
 ```
+
+#### 使用命令白名单和黑名单
+
+使用 `--whitelist` 和 `--blacklist` 参数可以限制可执行的命令范围，多个模式之间用逗号分隔。每个模式都是一个正则表达式，用于匹配命令。
+
+示例：使用命令白名单
+
+```json
+{
+  "mcpServers": {
+    "ssh-mpc-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@fangjunjie/ssh-mcp-server",
+        "--host 192.168.1.1",
+        "--port 22",
+        "--username root",
+        "--password pwd123456",
+        "--whitelist ^ls( .*)?,^cat .*,^df.*"
+      ]
+    }
+  }
+}
+```
+
+示例：使用命令黑名单
+
+```json
+{
+  "mcpServers": {
+    "ssh-mpc-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@fangjunjie/ssh-mcp-server",
+        "--host 192.168.1.1",
+        "--port 22",
+        "--username root",
+        "--password pwd123456",
+        "--blacklist ^rm .*,^shutdown.*,^reboot.*"
+      ]
+    }
+  }
+}
+```
+
+> 注意：如果同时指定了白名单和黑名单，系统会先检查命令是否在白名单中，然后再检查是否在黑名单中。命令必须同时通过两项检查才能被执行。
 
 ## 演示
 

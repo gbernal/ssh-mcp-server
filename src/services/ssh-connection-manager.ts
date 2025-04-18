@@ -121,9 +121,61 @@ export class SSHConnectionManager {
   }
 
   /**
+   * 验证命令是否允许执行
+   * @param command 要执行的命令
+   * @returns 验证结果对象
+   */
+  private validateCommand(command: string): { isAllowed: boolean; reason?: string } {
+    if (!this.config) {
+      throw new Error("SSH配置未设置");
+    }
+
+    // 检查白名单（如果配置了白名单，命令必须匹配其中一项才允许执行）
+    if (this.config.commandWhitelist && this.config.commandWhitelist.length > 0) {
+      const matchesWhitelist = this.config.commandWhitelist.some(pattern => {
+        const regex = new RegExp(pattern);
+        return regex.test(command);
+      });
+
+      if (!matchesWhitelist) {
+        return {
+          isAllowed: false,
+          reason: "命令不在白名单中，禁止执行"
+        };
+      }
+    }
+
+    // 检查黑名单（如果命令匹配黑名单中的任意项，则禁止执行）
+    if (this.config.commandBlacklist && this.config.commandBlacklist.length > 0) {
+      const matchesBlacklist = this.config.commandBlacklist.some(pattern => {
+        const regex = new RegExp(pattern);
+        return regex.test(command);
+      });
+
+      if (matchesBlacklist) {
+        return {
+          isAllowed: false,
+          reason: "命令匹配黑名单，禁止执行"
+        };
+      }
+    }
+
+    // 通过验证
+    return {
+      isAllowed: true
+    };
+  }
+
+  /**
    * 执行SSH命令
    */
   public async executeCommand(cmdString: string): Promise<string> {
+    // 验证命令
+    const validationResult = this.validateCommand(cmdString);
+    if (!validationResult.isAllowed) {
+      throw new Error(`命令验证失败: ${validationResult.reason}`);
+    }
+
     const client = await this.ensureConnected();
 
     return new Promise<string>((resolve, reject) => {
