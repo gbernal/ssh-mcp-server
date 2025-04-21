@@ -4,6 +4,7 @@ import { SSHConnectionManager } from "../services/ssh-connection-manager.js";
 import { CommandLineParser } from "../cli/command-line-parser.js";
 import { Logger } from "../utils/logger.js";
 import { registerAllTools } from "../tools/index.js";
+import { SERVER_CONFIG } from "../config/server.js";
 
 /**
  * MCP服务器类
@@ -13,10 +14,7 @@ export class SshMcpServer {
   private sshManager: SSHConnectionManager;
 
   constructor() {
-    this.server = new McpServer({
-      name: "ssh-mcp-server",
-      version: "1.0.6",
-    });
+    this.server = new McpServer(SERVER_CONFIG);
 
     this.sshManager = SSHConnectionManager.getInstance();
   }
