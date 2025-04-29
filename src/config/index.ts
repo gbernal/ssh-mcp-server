@@ -1,4 +1,4 @@
 /**
- * 导出所有配置
+ * Export all configurations
  */
 export * from './server.js'; 

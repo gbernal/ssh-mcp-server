@@ -4,16 +4,16 @@ import { SSHConnectionManager } from "../services/ssh-connection-manager.js";
 import { Logger } from "../utils/logger.js";
 
 /**
- * 注册执行命令工具
+ * Register execute command tool
  */
 export function registerExecuteCommandTool(server: McpServer): void {
   const sshManager = SSHConnectionManager.getInstance();
 
   server.tool(
     "execute-command",
-    "对已连接的服务器执行命令，并获取输出结果",
+    "Execute command on connected server and get output result",
     {
-      cmdString: z.string().describe("需要执行的命令"),
+      cmdString: z.string().describe("Command to execute"),
     },
     async ({ cmdString }) => {
       try {
@@ -22,7 +22,7 @@ export function registerExecuteCommandTool(server: McpServer): void {
           content: [{ type: "text", text: result }],
         };
       } catch (error: unknown) {
-        const errorMessage = Logger.handleError(error, "执行命令失败");
+        const errorMessage = Logger.handleError(error, "Failed to execute command");
         return {
           content: [{ type: "text", text: errorMessage }],
           isError: true,

@@ -1,7 +1,7 @@
 /**
- * MCP服务器配置
+ * MCP Server configuration
  */
 export const SERVER_CONFIG = {
   name: "ssh-mcp-server",
-  version: "1.0.8",
+  version: "1.1.0",
 }; 

@@ -5,7 +5,7 @@ import fs from "fs";
 import { SFTPWrapper } from "ssh2";
 
 /**
- * SSH连接管理器类
+ * SSH Connection Manager class
  */
 export class SSHConnectionManager {
   private static instance: SSHConnectionManager;
@@ -16,7 +16,7 @@ export class SSHConnectionManager {
   private constructor() {}
 
   /**
-   * 获取单例实例
+   * Get singleton instance
    */
   public static getInstance(): SSHConnectionManager {
     if (!SSHConnectionManager.instance) {
@@ -26,24 +26,24 @@ export class SSHConnectionManager {
   }
 
   /**
-   * 设置SSH配置
+   * Set SSH configuration
    */
   public setConfig(config: SSHConfig): void {
     this.config = config;
   }
 
   /**
-   * 获取SSH配置
+   * Get SSH configuration
    */
   public getConfig(): SSHConfig {
     if (!this.config) {
-      throw new Error("SSH配置未设置");
+      throw new Error("SSH configuration not set");
     }
     return this.config;
   }
 
   /**
-   * 连接到SSH服务器
+   * Connect to SSH server
    */
   public async connect(): Promise<void> {
     if (this.connected && this.client) {
@@ -55,23 +55,23 @@ export class SSHConnectionManager {
 
     await new Promise<void>((resolve, reject) => {
       if (!this.client) {
-        return reject(new Error("SSH客户端未初始化"));
+        return reject(new Error("SSH client not initialized"));
       }
 
       this.client.on("ready", () => {
         this.connected = true;
-        Logger.log(`已成功连接到SSH服务器 ${config.host}:${config.port}`);
+        Logger.log(`Successfully connected to SSH server ${config.host}:${config.port}`);
         resolve();
       });
 
       this.client.on("error", (err: Error) => {
         this.connected = false;
-        reject(new Error(`SSH连接失败: ${err.message}`));
+        reject(new Error(`SSH connection failed: ${err.message}`));
       });
 
       this.client.on("close", () => {
         this.connected = false;
-        Logger.log("SSH连接已关闭", "info");
+        Logger.log("SSH connection closed", "info");
       });
 
       const sshConfig: any = {
@@ -80,24 +80,24 @@ export class SSHConnectionManager {
         username: config.username,
       };
 
-      // 配置认证方式：使用私钥或密码
+      // Configure authentication method: using private key or password
       if (config.privateKey) {
         try {
           sshConfig.privateKey = fs.readFileSync(config.privateKey, "utf8");
           if (config.passphrase) {
             sshConfig.passphrase = config.passphrase;
           }
-          Logger.log("使用SSH私钥认证", "info");
+          Logger.log("Using SSH private key authentication", "info");
         } catch (err) {
           return reject(
-            new Error(`读取私钥文件失败: ${(err as Error).message}`)
+            new Error(`Failed to read private key file: ${(err as Error).message}`)
           );
         }
       } else if (config.password) {
         sshConfig.password = config.password;
-        Logger.log("使用密码认证", "info");
+        Logger.log("Using password authentication", "info");
       } else {
-        return reject(new Error("未提供有效的认证方式（密码或私钥）"));
+        return reject(new Error("No valid authentication method provided (password or private key)"));
       }
 
       this.client.connect(sshConfig);
@@ -105,7 +105,7 @@ export class SSHConnectionManager {
   }
 
   /**
-   * 确保SSH客户端已连接
+   * Ensure SSH client is connected
    * @private
    */
   private async ensureConnected(): Promise<Client> {
@@ -114,23 +114,23 @@ export class SSHConnectionManager {
     }
 
     if (!this.client) {
-      throw new Error("SSH客户端未初始化");
+      throw new Error("SSH client not initialized");
     }
 
     return this.client;
   }
 
   /**
-   * 验证命令是否允许执行
-   * @param command 要执行的命令
-   * @returns 验证结果对象
+   * Validate if command is allowed to execute
+   * @param command Command to execute
+   * @returns Validation result object
    */
   private validateCommand(command: string): { isAllowed: boolean; reason?: string } {
     if (!this.config) {
-      throw new Error("SSH配置未设置");
+      throw new Error("SSH configuration not set");
     }
 
-    // 检查白名单（如果配置了白名单，命令必须匹配其中一项才允许执行）
+    // Check whitelist (if whitelist is configured, command must match one of the patterns to be allowed)
     if (this.config.commandWhitelist && this.config.commandWhitelist.length > 0) {
       const matchesWhitelist = this.config.commandWhitelist.some(pattern => {
         const regex = new RegExp(pattern);
@@ -140,12 +140,12 @@ export class SSHConnectionManager {
       if (!matchesWhitelist) {
         return {
           isAllowed: false,
-          reason: "命令不在白名单中，禁止执行"
+          reason: "Command not in whitelist, execution forbidden"
         };
       }
     }
 
-    // 检查黑名单（如果命令匹配黑名单中的任意项，则禁止执行）
+    // Check blacklist (if command matches any pattern in blacklist, execution is forbidden)
     if (this.config.commandBlacklist && this.config.commandBlacklist.length > 0) {
       const matchesBlacklist = this.config.commandBlacklist.some(pattern => {
         const regex = new RegExp(pattern);
@@ -155,25 +155,25 @@ export class SSHConnectionManager {
       if (matchesBlacklist) {
         return {
           isAllowed: false,
-          reason: "命令匹配黑名单，禁止执行"
+          reason: "Command matches blacklist, execution forbidden"
         };
       }
     }
 
-    // 通过验证
+    // Validation passed
     return {
       isAllowed: true
     };
   }
 
   /**
-   * 执行SSH命令
+   * Execute SSH command
    */
   public async executeCommand(cmdString: string): Promise<string> {
-    // 验证命令
+    // Validate command
     const validationResult = this.validateCommand(cmdString);
     if (!validationResult.isAllowed) {
-      throw new Error(`命令验证失败: ${validationResult.reason}`);
+      throw new Error(`Command validation failed: ${validationResult.reason}`);
     }
 
     const client = await this.ensureConnected();
@@ -183,7 +183,7 @@ export class SSHConnectionManager {
         cmdString,
         (err: Error | undefined, stream: ClientChannel) => {
           if (err) {
-            return reject(new Error(`执行命令错误: ${err.message}`));
+            return reject(new Error(`Command execution error: ${err.message}`));
           }
 
           let data = "";
@@ -198,14 +198,14 @@ export class SSHConnectionManager {
           stream.on("close", (code: number) => {
             if (code !== 0) {
               return reject(
-                new Error(`命令执行失败，退出码: ${code}, 错误: ${errorData}`)
+                new Error(`Command execution failed, exit code: ${code}, error: ${errorData}`)
               );
             }
             resolve(data);
           });
 
           stream.on("error", (err: Error) => {
-            reject(new Error(`流错误: ${err.message}`));
+            reject(new Error(`Stream error: ${err.message}`));
           });
         }
       );
@@ -213,7 +213,7 @@ export class SSHConnectionManager {
   }
 
   /**
-   * 上传文件
+   * Upload file
    */
   public async upload(localPath: string, remotePath: string): Promise<string> {
     const client = await this.ensureConnected();
@@ -221,7 +221,7 @@ export class SSHConnectionManager {
     return new Promise<string>((resolve, reject) => {
       client.sftp((err: Error | undefined, sftp: SFTPWrapper) => {
         if (err) {
-          return reject(new Error(`SFTP连接失败: ${err.message}`));
+          return reject(new Error(`SFTP connection failed: ${err.message}`));
         }
 
         const readStream = fs.createReadStream(localPath);
@@ -230,18 +230,18 @@ export class SSHConnectionManager {
         readStream.pipe(writeStream);
         
         readStream.on("end", () => {
-          resolve("文件上传成功");
+          resolve("File uploaded successfully");
         });
 
         readStream.on("error", (err: Error) => {
-          reject(new Error(`文件上传失败: ${err.message}`));
+          reject(new Error(`File upload failed: ${err.message}`));
         });
       });
     });
   }
 
   /**
-   * 下载文件
+   * Download file
    */
   public async download(remotePath: string, localPath: string): Promise<string> {
     const client = await this.ensureConnected();
@@ -249,7 +249,7 @@ export class SSHConnectionManager {
     return new Promise<string>((resolve, reject) => {
       client.sftp((err: Error | undefined, sftp: SFTPWrapper) => {
         if (err) {
-          return reject(new Error(`SFTP连接失败: ${err.message}`));
+          return reject(new Error(`SFTP connection failed: ${err.message}`));
         }
 
         const readStream = sftp.createReadStream(remotePath);
@@ -258,22 +258,22 @@ export class SSHConnectionManager {
         readStream.pipe(writeStream);
         
         writeStream.on("finish", () => {
-          resolve("文件下载成功");
+          resolve("File downloaded successfully");
         });
 
         readStream.on("error", (err: Error) => {
-          reject(new Error(`文件下载失败: ${err.message}`));
+          reject(new Error(`File download failed: ${err.message}`));
         });
 
         writeStream.on("error", (err: Error) => {
-          reject(new Error(`保存文件失败: ${err.message}`));
+          reject(new Error(`Failed to save file: ${err.message}`));
         });
       });
     });
   }
 
   /**
-   * 断开SSH连接
+   * Disconnect SSH connection
    */
   public disconnect(): void {
     if (this.client) {

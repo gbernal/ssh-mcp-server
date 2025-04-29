@@ -1,7 +1,7 @@
 {
   "name": "@fangjunjie/ssh-mcp-server",
-  "version": "1.0.8",
-  "description": "基于 SSH 的 MCP 服务器",
+  "version": "1.1.0",
+  "description": "SSH-based MCP Server (基于 SSH 的 MCP 服务器)",
   "main": "build/index.js",
   "type": "module",
   "bin": {

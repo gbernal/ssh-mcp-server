@@ -7,7 +7,7 @@ import { registerAllTools } from "../tools/index.js";
 import { SERVER_CONFIG } from "../config/server.js";
 
 /**
- * MCP服务器类
+ * MCP Server class
  */
 export class SshMcpServer {
   private server: McpServer;
@@ -20,30 +20,30 @@ export class SshMcpServer {
   }
 
   /**
-   * 注册工具
+   * Register tools
    */
   private registerTools(): void {
     registerAllTools(this.server);
   }
 
   /**
-   * 运行服务器
+   * Run the server
    */
   public async run(): Promise<void> {
-    // 初始化SSH配置
+    // Initialize SSH configuration
     const sshConfig = CommandLineParser.parseArgs();
     this.sshManager.setConfig(sshConfig);
 
-    // 预连接SSH服务器
+    // Pre-connect to SSH server
     await this.sshManager.connect();
 
-    // 注册工具
+    // Register tools
     this.registerTools();
 
-    // 创建传输实例并连接
+    // Create transport instance and connect
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
 
-    Logger.log("MCP服务器连接已建立");
+    Logger.log("MCP server connection established");
   }
 }

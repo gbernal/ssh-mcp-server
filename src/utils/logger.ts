@@ -1,11 +1,11 @@
 import { LogLevel } from '../models/types.js';
 
 /**
- * 日志记录器类
+ * Logger class
  */
 export class Logger {
   /**
-   * 记录日志
+   * Log a message
    */
   public static log(message: string, level: LogLevel = "info"): void {
     const timestamp = new Date().toISOString();
@@ -26,7 +26,7 @@ export class Logger {
   }
 
   /**
-   * 处理错误
+   * Handle error
    */
   public static handleError(
     error: unknown,

@@ -1,5 +1,5 @@
 /**
- * SSH连接配置接口
+ * SSH connection configuration interface
  */
 export interface SSHConfig {
   host: string;
@@ -8,11 +8,11 @@ export interface SSHConfig {
   password?: string;
   privateKey?: string;
   passphrase?: string;
-  commandWhitelist?: string[]; // 命令白名单（正则表达式字符串数组）
-  commandBlacklist?: string[]; // 命令黑名单（正则表达式字符串数组）
+  commandWhitelist?: string[]; // Command whitelist (array of regex strings)
+  commandBlacklist?: string[]; // Command blacklist (array of regex strings)
 }
 
 /**
- * 日志级别
+ * Log levels
  */
 export type LogLevel = "info" | "error" | "debug"; 

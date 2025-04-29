@@ -4,17 +4,17 @@ import { SSHConnectionManager } from "../services/ssh-connection-manager.js";
 import { Logger } from "../utils/logger.js";
 
 /**
- * 注册文件上传工具
+ * Register file upload tool
  */
 export function registerUploadTool(server: McpServer): void {
   const sshManager = SSHConnectionManager.getInstance();
 
   server.tool(
     "upload",
-    "上传文件到已连接的服务器",
+    "Upload file to connected server",
     {
-      localPath: z.string().describe("本地路径"),
-      remotePath: z.string().describe("远程路径"),
+      localPath: z.string().describe("Local path"),
+      remotePath: z.string().describe("Remote path"),
     },
     async ({ localPath, remotePath }) => {
       try {
@@ -23,7 +23,7 @@ export function registerUploadTool(server: McpServer): void {
           content: [{ type: "text", text: result }],
         };
       } catch (error: unknown) {
-        const errorMessage = Logger.handleError(error, "上传文件失败");
+        const errorMessage = Logger.handleError(error, "Failed to upload file");
         return {
           content: [{ type: "text", text: errorMessage }],
           isError: true,
