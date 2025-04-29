@@ -155,11 +155,3 @@ Example: Using Command Blacklist
 ```
 
 > Note: If both whitelist and blacklist are specified, the system will first check whether the command is in the whitelist, and then check whether it is in the blacklist. The command must pass both checks to be executed.
-
-## 🎮 Demo
-
-### 🖥️ Cursor Integration
-
-![demo_1.png](images/demo_1.png)
-
-![demo_2.png](images/demo_2.png) 
