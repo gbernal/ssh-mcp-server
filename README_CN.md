@@ -21,6 +21,8 @@ ssh-mcp-server 是一个桥接工具，可以让 AI 助手等支持 MCP 协议�
 
 GitHub：[https://github.com/classfang/ssh-mcp-server](https://github.com/classfang/ssh-mcp-server)
 
+NPM: [https://www.npmjs.com/package/@fangjunjie/ssh-mcp-server](https://www.npmjs.com/package/@fangjunjie/ssh-mcp-server)
+
 ## 🛠️ 工具列表
 
 | 工具 | 名称 | 描述 |

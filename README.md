@@ -21,6 +21,8 @@ ssh-mcp-server is a bridging tool that enables AI assistants and other applicati
 
 GitHub: [https://github.com/classfang/ssh-mcp-server](https://github.com/classfang/ssh-mcp-server)
 
+NPM: [https://www.npmjs.com/package/@fangjunjie/ssh-mcp-server](https://www.npmjs.com/package/@fangjunjie/ssh-mcp-server)
+
 ## 🛠️ Tools List
 
 | Tool | Name | Description |
