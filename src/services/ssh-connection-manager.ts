@@ -12,6 +12,12 @@ export class SSHConnectionManager {
   private client: Client | null = null;
   private config: SSHConfig | null = null;
   private connected = false;
+  
+  // --- Reconnection Logic Properties ---
+  private manualDisconnect = false;
+  private reconnectAttempts = 0;
+  private readonly maxReconnectAttempts = 10; // Max number of retries
+  private readonly reconnectDelay = 5000; // Initial delay of 5 seconds
 
   private constructor() {}
 
@@ -51,6 +57,7 @@ export class SSHConnectionManager {
     }
 
     const config = this.getConfig();
+    this.manualDisconnect = false; // Reset flag on new connection attempt
     this.client = new Client();
 
     await new Promise<void>((resolve, reject) => {
@@ -58,26 +65,39 @@ export class SSHConnectionManager {
         return reject(new Error("SSH client not initialized"));
       }
 
+      const initialErrorHandler = (err: Error) => {
+          // Only reject the promise for the very first connection attempt.
+          // Subsequent reconnection errors will be handled by the 'close' event.
+          if (this.reconnectAttempts === 0) {
+            reject(new Error(`SSH connection failed: ${err.message}`));
+          }
+      };
+
       this.client.on("ready", () => {
         this.connected = true;
+        this.reconnectAttempts = 0; // Reset counter on a successful connection
         Logger.log(`Successfully connected to SSH server ${config.host}:${config.port}`);
+        this.client?.removeListener("error", initialErrorHandler); // Clean up listener
         resolve();
       });
 
-      this.client.on("error", (err: Error) => {
-        this.connected = false;
-        reject(new Error(`SSH connection failed: ${err.message}`));
-      });
+      this.client.on("error", initialErrorHandler);
 
       this.client.on("close", () => {
         this.connected = false;
         Logger.log("SSH connection closed", "info");
+        // If the disconnection was not intentional, start the reconnect process.
+        if (!this.manualDisconnect) {
+          this.scheduleReconnect();
+        }
       });
 
       const sshConfig: any = {
         host: config.host,
         port: config.port,
         username: config.username,
+        keepaliveInterval: 30000, // Keep-alive packet every 30 seconds
+        keepaliveCountMax: 3,     // Disconnect after 3 failed keep-alives
       };
 
       // Configure authentication method: using private key or password
@@ -102,6 +122,31 @@ export class SSHConnectionManager {
 
       this.client.connect(sshConfig);
     });
+  }
+
+  /**
+   * Schedules a reconnection attempt.
+   * @private
+   */
+  private scheduleReconnect(): void {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      Logger.log("Maximum reconnection attempts reached. Giving up.", "error");
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = this.reconnectDelay * this.reconnectAttempts; // Linear backoff
+
+    Logger.log(
+      `Attempting to reconnect in ${delay / 1000}s (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+    );
+
+    setTimeout(() => {
+      this.connect().catch(err => {
+        // Log the error, the 'close' event will trigger the next scheduled reconnect.
+        Logger.handleError(err, `Reconnection attempt ${this.reconnectAttempts} failed`);
+      });
+    }, delay);
   }
 
   /**
@@ -277,9 +322,10 @@ export class SSHConnectionManager {
    */
   public disconnect(): void {
     if (this.client) {
+      this.manualDisconnect = true; // Set flag to prevent reconnection
       this.client.end();
       this.client = null;
       this.connected = false;
     }
   }
-} 
+}
