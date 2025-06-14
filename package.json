@@ -1,7 +1,7 @@
 {
-  "name": "@fangjunjie/ssh-mcp-server",
-  "version": "1.1.0",
-  "description": "SSH-based MCP Server (基于 SSH 的 MCP 服务器)",
+  "name": "@gbernal/ssh-mcp-server",
+  "version": "1.2.0",
+  "description": "SSH-based MCP Server (MCP to ssh to linux machines /Rpi)",
   "main": "build/index.js",
   "type": "module",
   "bin": {
@@ -18,7 +18,7 @@
     "server",
     "cli"
   ],
-  "author": "Junki",
+  "author": "Junki/Guillermo",
   "license": "ISC",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",
