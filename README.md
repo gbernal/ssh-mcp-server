@@ -30,6 +30,7 @@ NPM: [https://www.npmjs.com/package/@fangjunjie/ssh-mcp-server](https://www.npmj
 | execute-command | Command Execution Tool | Execute SSH commands on remote servers and get results |
 | upload | File Upload Tool | Upload local files to specified locations on remote servers |
 | download | File Download Tool | Download files from remote servers to local specified locations |
+| list-servers | List Servers Tool | List all available SSH server configurations |
 
 ## 📚 Usage
 
@@ -157,3 +158,49 @@ Example: Using Command Blacklist
 ```
 
 > Note: If both whitelist and blacklist are specified, the system will first check whether the command is in the whitelist, and then check whether it is in the blacklist. The command must pass both checks to be executed.
+
+### 🧩 Multi-SSH Connection Example
+
+You can specify multiple SSH connections by passing multiple --ssh parameters, each with a unique name:
+
+```bash
+npx @fangjunjie/ssh-mcp-server \
+  --ssh "name=dev,host=1.2.3.4,port=22,user=alice,password=xxx" \
+  --ssh "name=prod,host=5.6.7.8,port=22,user=bob,password=yyy"
+```
+
+In MCP tool calls, specify the connection name via the `connectionName` parameter. If omitted, the default connection is used.
+
+Example (execute command on 'prod' connection):
+
+```json
+{
+  "tool": "execute-command",
+  "params": {
+    "cmdString": "ls -al",
+    "connectionName": "prod"
+  }
+}
+```
+
+### 🗂️ List All SSH Servers
+
+You can use the MCP tool `list-servers` to get all available SSH server configurations:
+
+Example call:
+
+```json
+{
+  "tool": "list-servers",
+  "params": {}
+}
+```
+
+Example response:
+
+```json
+[
+  { "name": "dev", "host": "1.2.3.4", "port": 22, "username": "alice" },
+  { "name": "prod", "host": "5.6.7.8", "port": 22, "username": "bob" }
+]
+```

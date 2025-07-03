@@ -34,8 +34,8 @@ export class SshMcpServer {
     const sshConfig = CommandLineParser.parseArgs();
     this.sshManager.setConfig(sshConfig);
 
-    // Pre-connect to SSH server
-    await this.sshManager.connect();
+    // 批量预连接所有SSH服务器
+    await this.sshManager.connectAll();
 
     // Register tools
     this.registerTools();

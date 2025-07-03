@@ -14,10 +14,11 @@ export function registerExecuteCommandTool(server: McpServer): void {
     "Execute command on connected server and get output result",
     {
       cmdString: z.string().describe("Command to execute"),
+      connectionName: z.string().optional().describe("SSH connection name (optional, default is 'default')"),
     },
-    async ({ cmdString }) => {
+    async ({ cmdString, connectionName }) => {
       try {
-        const result = await sshManager.executeCommand(cmdString);
+        const result = await sshManager.executeCommand(cmdString, connectionName);
         return {
           content: [{ type: "text", text: result }],
         };

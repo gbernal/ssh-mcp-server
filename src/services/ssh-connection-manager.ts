@@ -1,5 +1,5 @@
 import { Client, ClientChannel } from "ssh2";
-import { SSHConfig } from "../models/types.js";
+import { SSHConfig, SshConnectionConfigMap } from "../models/types.js";
 import { Logger } from "../utils/logger.js";
 import fs from "fs";
 import { SFTPWrapper } from "ssh2";
@@ -9,9 +9,10 @@ import { SFTPWrapper } from "ssh2";
  */
 export class SSHConnectionManager {
   private static instance: SSHConnectionManager;
-  private client: Client | null = null;
-  private config: SSHConfig | null = null;
-  private connected = false;
+  private clients: Map<string, Client> = new Map();
+  private configs: SshConnectionConfigMap = {};
+  private connected: Map<string, boolean> = new Map();
+  private defaultName: string = "default";
 
   private constructor() {}
 
@@ -26,117 +27,124 @@ export class SSHConnectionManager {
   }
 
   /**
-   * Set SSH configuration
+   * 批量设置SSH配置
    */
-  public setConfig(config: SSHConfig): void {
-    this.config = config;
-  }
-
-  /**
-   * Get SSH configuration
-   */
-  public getConfig(): SSHConfig {
-    if (!this.config) {
-      throw new Error("SSH configuration not set");
+  public setConfig(configs: SshConnectionConfigMap, defaultName?: string): void {
+    this.configs = configs;
+    if (defaultName && configs[defaultName]) {
+      this.defaultName = defaultName;
+    } else if (Object.keys(configs).length > 0) {
+      this.defaultName = Object.keys(configs)[0];
     }
-    return this.config;
   }
 
   /**
-   * Connect to SSH server
+   * 获取指定连接配置
    */
-  public async connect(): Promise<void> {
-    if (this.connected && this.client) {
+  public getConfig(name?: string): SSHConfig {
+    const key = name || this.defaultName;
+    if (!this.configs[key]) {
+      throw new Error(`SSH configuration for '${key}' not set`);
+    }
+    return this.configs[key];
+  }
+
+  /**
+   * 批量连接所有配置的SSH
+   */
+  public async connectAll(): Promise<void> {
+    const names = Object.keys(this.configs);
+    for (const name of names) {
+      await this.connect(name);
+    }
+  }
+
+  /**
+   * 连接指定名称的SSH
+   */
+  public async connect(name?: string): Promise<void> {
+    const key = name || this.defaultName;
+    if (this.connected.get(key) && this.clients.get(key)) {
       return;
     }
-
-    const config = this.getConfig();
-    this.client = new Client();
-
+    const config = this.getConfig(key);
+    const client = new Client();
     await new Promise<void>((resolve, reject) => {
-      if (!this.client) {
-        return reject(new Error("SSH client not initialized"));
-      }
-
-      this.client.on("ready", () => {
-        this.connected = true;
-        Logger.log(`Successfully connected to SSH server ${config.host}:${config.port}`);
+      client.on("ready", () => {
+        this.connected.set(key, true);
+        Logger.log(`Successfully connected to SSH server [${key}] ${config.host}:${config.port}`);
         resolve();
       });
-
-      this.client.on("error", (err: Error) => {
-        this.connected = false;
-        reject(new Error(`SSH connection failed: ${err.message}`));
+      client.on("error", (err: Error) => {
+        this.connected.set(key, false);
+        reject(new Error(`SSH connection [${key}] failed: ${err.message}`));
       });
-
-      this.client.on("close", () => {
-        this.connected = false;
-        Logger.log("SSH connection closed", "info");
+      client.on("close", () => {
+        this.connected.set(key, false);
+        Logger.log(`SSH connection [${key}] closed`, "info");
       });
-
       const sshConfig: any = {
         host: config.host,
         port: config.port,
         username: config.username,
       };
-
-      // Configure authentication method: using private key or password
       if (config.privateKey) {
         try {
           sshConfig.privateKey = fs.readFileSync(config.privateKey, "utf8");
           if (config.passphrase) {
             sshConfig.passphrase = config.passphrase;
           }
-          Logger.log("Using SSH private key authentication", "info");
+          Logger.log(`Using SSH private key authentication for [${key}]`, "info");
         } catch (err) {
-          return reject(
-            new Error(`Failed to read private key file: ${(err as Error).message}`)
-          );
+          return reject(new Error(`Failed to read private key file for [${key}]: ${(err as Error).message}`));
         }
       } else if (config.password) {
         sshConfig.password = config.password;
-        Logger.log("Using password authentication", "info");
+        Logger.log(`Using password authentication for [${key}]`, "info");
       } else {
-        return reject(new Error("No valid authentication method provided (password or private key)"));
+        return reject(new Error(`No valid authentication method provided for [${key}] (password or private key)`));
       }
-
-      this.client.connect(sshConfig);
+      client.connect(sshConfig);
     });
+    this.clients.set(key, client);
+  }
+
+  /**
+   * 获取指定名称的SSH Client
+   */
+  public getClient(name?: string): Client {
+    const key = name || this.defaultName;
+    const client = this.clients.get(key);
+    if (!client) {
+      throw new Error(`SSH client for '${key}' not connected`);
+    }
+    return client;
   }
 
   /**
    * Ensure SSH client is connected
    * @private
    */
-  private async ensureConnected(): Promise<Client> {
-    if (!this.connected || !this.client) {
-      await this.connect();
+  private async ensureConnected(name?: string): Promise<Client> {
+    const key = name || this.defaultName;
+    if (!this.connected.get(key) || !this.clients.get(key)) {
+      await this.connect(key);
     }
-
-    if (!this.client) {
-      throw new Error("SSH client not initialized");
+    const client = this.clients.get(key);
+    if (!client) {
+      throw new Error(`SSH client for '${key}' not initialized`);
     }
-
-    return this.client;
+    return client;
   }
 
-  /**
-   * Validate if command is allowed to execute
-   * @param command Command to execute
-   * @returns Validation result object
-   */
-  private validateCommand(command: string): { isAllowed: boolean; reason?: string } {
-    if (!this.config) {
-      throw new Error("SSH configuration not set");
-    }
-
+  private validateCommand(command: string, name?: string): { isAllowed: boolean; reason?: string } {
+    const config = this.getConfig(name);
     // Check whitelist (if whitelist is configured, command must match one of the patterns to be allowed)
-    if (this.config.commandWhitelist && this.config.commandWhitelist.length > 0) {
-      const matchesWhitelist = this.config.commandWhitelist.some(pattern => {
+    if (config.commandWhitelist && config.commandWhitelist.length > 0) {
+      const matchesWhitelist = config.commandWhitelist.some(pattern => {
         const regex = new RegExp(pattern);
         return regex.test(command);
       });
-
       if (!matchesWhitelist) {
         return {
           isAllowed: false,
@@ -144,14 +152,12 @@ export class SSHConnectionManager {
         };
       }
     }
-
     // Check blacklist (if command matches any pattern in blacklist, execution is forbidden)
-    if (this.config.commandBlacklist && this.config.commandBlacklist.length > 0) {
-      const matchesBlacklist = this.config.commandBlacklist.some(pattern => {
+    if (config.commandBlacklist && config.commandBlacklist.length > 0) {
+      const matchesBlacklist = config.commandBlacklist.some(pattern => {
         const regex = new RegExp(pattern);
         return regex.test(command);
       });
-
       if (matchesBlacklist) {
         return {
           isAllowed: false,
@@ -159,7 +165,6 @@ export class SSHConnectionManager {
         };
       }
     }
-
     // Validation passed
     return {
       isAllowed: true
@@ -169,15 +174,13 @@ export class SSHConnectionManager {
   /**
    * Execute SSH command
    */
-  public async executeCommand(cmdString: string): Promise<string> {
+  public async executeCommand(cmdString: string, name?: string): Promise<string> {
     // Validate command
-    const validationResult = this.validateCommand(cmdString);
+    const validationResult = this.validateCommand(cmdString, name);
     if (!validationResult.isAllowed) {
       throw new Error(`Command validation failed: ${validationResult.reason}`);
     }
-
-    const client = await this.ensureConnected();
-
+    const client = await this.ensureConnected(name);
     return new Promise<string>((resolve, reject) => {
       client.exec(
         cmdString,
@@ -185,16 +188,13 @@ export class SSHConnectionManager {
           if (err) {
             return reject(new Error(`Command execution error: ${err.message}`));
           }
-
           let data = "";
           let errorData = "";
-
           stream.on("data", (chunk: Buffer) => (data += chunk.toString()));
           stream.stderr.on(
             "data",
             (chunk: Buffer) => (errorData += chunk.toString())
           );
-
           stream.on("close", (code: number) => {
             if (code !== 0) {
               return reject(
@@ -203,7 +203,6 @@ export class SSHConnectionManager {
             }
             resolve(data);
           });
-
           stream.on("error", (err: Error) => {
             reject(new Error(`Stream error: ${err.message}`));
           });
@@ -215,8 +214,8 @@ export class SSHConnectionManager {
   /**
    * Upload file
    */
-  public async upload(localPath: string, remotePath: string): Promise<string> {
-    const client = await this.ensureConnected();
+  public async upload(localPath: string, remotePath: string, name?: string): Promise<string> {
+    const client = await this.ensureConnected(name);
 
     return new Promise<string>((resolve, reject) => {
       client.sftp((err: Error | undefined, sftp: SFTPWrapper) => {
@@ -243,8 +242,8 @@ export class SSHConnectionManager {
   /**
    * Download file
    */
-  public async download(remotePath: string, localPath: string): Promise<string> {
-    const client = await this.ensureConnected();
+  public async download(remotePath: string, localPath: string, name?: string): Promise<string> {
+    const client = await this.ensureConnected(name);
 
     return new Promise<string>((resolve, reject) => {
       client.sftp((err: Error | undefined, sftp: SFTPWrapper) => {
@@ -276,10 +275,27 @@ export class SSHConnectionManager {
    * Disconnect SSH connection
    */
   public disconnect(): void {
-    if (this.client) {
-      this.client.end();
-      this.client = null;
-      this.connected = false;
+    if (this.clients.size > 0) {
+      for (const client of this.clients.values()) {
+        client.end();
+      }
+      this.clients.clear();
     }
+  }
+
+  /**
+   * 获取所有已配置服务器的基本信息
+   */
+  public getAllServerInfos(): Array<{ name: string; host: string; port: number; username: string; connected: boolean }> {
+    return Object.values(this.configs).map(cfg => {
+      const key = cfg.name || '';
+      return {
+        name: key,
+        host: cfg.host,
+        port: cfg.port,
+        username: cfg.username,
+        connected: this.connected.get(key) === true
+      };
+    });
   }
 } 
