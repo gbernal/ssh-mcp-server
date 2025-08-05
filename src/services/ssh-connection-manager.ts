@@ -226,15 +226,26 @@ export class SSHConnectionManager {
         const readStream = fs.createReadStream(localPath);
         const writeStream = sftp.createWriteStream(remotePath);
 
-        readStream.pipe(writeStream);
-        
-        readStream.on("end", () => {
+        const cleanup = () => {
+          sftp.end();
+        };
+
+        writeStream.on("close", () => {
+          cleanup();
           resolve("File uploaded successfully");
         });
 
-        readStream.on("error", (err: Error) => {
+        writeStream.on("error", (err: Error) => {
+          cleanup();
           reject(new Error(`File upload failed: ${err.message}`));
         });
+
+        readStream.on("error", (err: Error) => {
+          cleanup();
+          reject(new Error(`Failed to read local file: ${err.message}`));
+        });
+
+        readStream.pipe(writeStream);
       });
     });
   }
@@ -254,19 +265,26 @@ export class SSHConnectionManager {
         const readStream = sftp.createReadStream(remotePath);
         const writeStream = fs.createWriteStream(localPath);
 
-        readStream.pipe(writeStream);
-        
+        const cleanup = () => {
+          sftp.end();
+        };
+
         writeStream.on("finish", () => {
+          cleanup();
           resolve("File downloaded successfully");
         });
 
+        writeStream.on("error", (err: Error) => {
+          cleanup();
+          reject(new Error(`Failed to save file: ${err.message}`));
+        });
+
         readStream.on("error", (err: Error) => {
+          cleanup();
           reject(new Error(`File download failed: ${err.message}`));
         });
 
-        writeStream.on("error", (err: Error) => {
-          reject(new Error(`Failed to save file: ${err.message}`));
-        });
+        readStream.pipe(writeStream);
       });
     });
   }
@@ -287,13 +305,13 @@ export class SSHConnectionManager {
    * 获取所有已配置服务器的基本信息
    */
   public getAllServerInfos(): Array<{ name: string; host: string; port: number; username: string; connected: boolean }> {
-    return Object.values(this.configs).map(cfg => {
-      const key = cfg.name || '';
+    return Object.keys(this.configs).map(key => {
+      const config = this.configs[key];
       return {
         name: key,
-        host: cfg.host,
-        port: cfg.port,
-        username: cfg.username,
+        host: config.host,
+        port: config.port,
+        username: config.username,
         connected: this.connected.get(key) === true
       };
     });
