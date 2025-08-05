@@ -2,6 +2,7 @@ import { Client, ClientChannel } from "ssh2";
 import { SSHConfig, SshConnectionConfigMap } from "../models/types.js";
 import { Logger } from "../utils/logger.js";
 import fs from "fs";
+import path from "path";
 import { SFTPWrapper } from "ssh2";
 
 /**
@@ -138,6 +139,14 @@ export class SSHConnectionManager {
   }
 
   private validateCommand(command: string, name?: string): { isAllowed: boolean; reason?: string } {
+    // Prevent command chaining
+    if (/[;&|]/.test(command)) {
+      return {
+        isAllowed: false,
+        reason: "Command chaining is not allowed."
+      };
+    }
+
     const config = this.getConfig(name);
     // Check whitelist (if whitelist is configured, command must match one of the patterns to be allowed)
     if (config.commandWhitelist && config.commandWhitelist.length > 0) {
@@ -214,7 +223,20 @@ export class SSHConnectionManager {
   /**
    * Upload file
    */
+  private validateLocalPath(localPath: string): string {
+    const resolvedPath = path.resolve(localPath);
+    const workingDir = process.cwd();
+    if (!resolvedPath.startsWith(workingDir)) {
+      throw new Error(`Path traversal detected. Local path must be within the working directory.`);
+    }
+    return resolvedPath;
+  }
+
+  /**
+   * Upload file
+   */
   public async upload(localPath: string, remotePath: string, name?: string): Promise<string> {
+    const validatedLocalPath = this.validateLocalPath(localPath);
     const client = await this.ensureConnected(name);
 
     return new Promise<string>((resolve, reject) => {
@@ -223,7 +245,7 @@ export class SSHConnectionManager {
           return reject(new Error(`SFTP connection failed: ${err.message}`));
         }
 
-        const readStream = fs.createReadStream(localPath);
+        const readStream = fs.createReadStream(validatedLocalPath);
         const writeStream = sftp.createWriteStream(remotePath);
 
         const cleanup = () => {
@@ -254,6 +276,7 @@ export class SSHConnectionManager {
    * Download file
    */
   public async download(remotePath: string, localPath: string, name?: string): Promise<string> {
+    const validatedLocalPath = this.validateLocalPath(localPath);
     const client = await this.ensureConnected(name);
 
     return new Promise<string>((resolve, reject) => {
@@ -263,7 +286,7 @@ export class SSHConnectionManager {
         }
 
         const readStream = sftp.createReadStream(remotePath);
-        const writeStream = fs.createWriteStream(localPath);
+        const writeStream = fs.createWriteStream(validatedLocalPath);
 
         const cleanup = () => {
           sftp.end();
