@@ -2,6 +2,7 @@ import { Client, ClientChannel } from "ssh2";
 import { SSHConfig, SshConnectionConfigMap } from "../models/types.js";
 import { Logger } from "../utils/logger.js";
 import fs from "fs";
+import path from "path";
 import { SFTPWrapper } from "ssh2";
 
 /**
@@ -138,6 +139,14 @@ export class SSHConnectionManager {
   }
 
   private validateCommand(command: string, name?: string): { isAllowed: boolean; reason?: string } {
+    // Prevent command chaining
+    if (/[;&|]/.test(command)) {
+      return {
+        isAllowed: false,
+        reason: "Command chaining is not allowed."
+      };
+    }
+
     const config = this.getConfig(name);
     // Check whitelist (if whitelist is configured, command must match one of the patterns to be allowed)
     if (config.commandWhitelist && config.commandWhitelist.length > 0) {
@@ -214,7 +223,20 @@ export class SSHConnectionManager {
   /**
    * Upload file
    */
+  private validateLocalPath(localPath: string): string {
+    const resolvedPath = path.resolve(localPath);
+    const workingDir = process.cwd();
+    if (!resolvedPath.startsWith(workingDir)) {
+      throw new Error(`Path traversal detected. Local path must be within the working directory.`);
+    }
+    return resolvedPath;
+  }
+
+  /**
+   * Upload file
+   */
   public async upload(localPath: string, remotePath: string, name?: string): Promise<string> {
+    const validatedLocalPath = this.validateLocalPath(localPath);
     const client = await this.ensureConnected(name);
 
     return new Promise<string>((resolve, reject) => {
@@ -223,18 +245,29 @@ export class SSHConnectionManager {
           return reject(new Error(`SFTP connection failed: ${err.message}`));
         }
 
-        const readStream = fs.createReadStream(localPath);
+        const readStream = fs.createReadStream(validatedLocalPath);
         const writeStream = sftp.createWriteStream(remotePath);
 
-        readStream.pipe(writeStream);
-        
-        readStream.on("end", () => {
+        const cleanup = () => {
+          sftp.end();
+        };
+
+        writeStream.on("close", () => {
+          cleanup();
           resolve("File uploaded successfully");
         });
 
-        readStream.on("error", (err: Error) => {
+        writeStream.on("error", (err: Error) => {
+          cleanup();
           reject(new Error(`File upload failed: ${err.message}`));
         });
+
+        readStream.on("error", (err: Error) => {
+          cleanup();
+          reject(new Error(`Failed to read local file: ${err.message}`));
+        });
+
+        readStream.pipe(writeStream);
       });
     });
   }
@@ -243,6 +276,7 @@ export class SSHConnectionManager {
    * Download file
    */
   public async download(remotePath: string, localPath: string, name?: string): Promise<string> {
+    const validatedLocalPath = this.validateLocalPath(localPath);
     const client = await this.ensureConnected(name);
 
     return new Promise<string>((resolve, reject) => {
@@ -252,21 +286,28 @@ export class SSHConnectionManager {
         }
 
         const readStream = sftp.createReadStream(remotePath);
-        const writeStream = fs.createWriteStream(localPath);
+        const writeStream = fs.createWriteStream(validatedLocalPath);
 
-        readStream.pipe(writeStream);
-        
+        const cleanup = () => {
+          sftp.end();
+        };
+
         writeStream.on("finish", () => {
+          cleanup();
           resolve("File downloaded successfully");
         });
 
+        writeStream.on("error", (err: Error) => {
+          cleanup();
+          reject(new Error(`Failed to save file: ${err.message}`));
+        });
+
         readStream.on("error", (err: Error) => {
+          cleanup();
           reject(new Error(`File download failed: ${err.message}`));
         });
 
-        writeStream.on("error", (err: Error) => {
-          reject(new Error(`Failed to save file: ${err.message}`));
-        });
+        readStream.pipe(writeStream);
       });
     });
   }
@@ -287,13 +328,13 @@ export class SSHConnectionManager {
    * 获取所有已配置服务器的基本信息
    */
   public getAllServerInfos(): Array<{ name: string; host: string; port: number; username: string; connected: boolean }> {
-    return Object.values(this.configs).map(cfg => {
-      const key = cfg.name || '';
+    return Object.keys(this.configs).map(key => {
+      const config = this.configs[key];
       return {
         name: key,
-        host: cfg.host,
-        port: cfg.port,
-        username: cfg.username,
+        host: config.host,
+        port: config.port,
+        username: config.username,
         connected: this.connected.get(key) === true
       };
     });

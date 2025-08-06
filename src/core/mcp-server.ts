@@ -34,8 +34,11 @@ export class SshMcpServer {
     const sshConfig = CommandLineParser.parseArgs();
     this.sshManager.setConfig(sshConfig);
 
-    // 批量预连接所有SSH服务器
-    await this.sshManager.connectAll();
+    // Security warning
+    const allConfigs = Object.values(sshConfig);
+    if (allConfigs.some(c => !c.commandWhitelist || c.commandWhitelist.length === 0)) {
+      Logger.log("WARNING: Running without a command whitelist is strongly discouraged. Please configure a whitelist to restrict the commands that can be executed.", "info");
+    }
 
     // Register tools
     this.registerTools();
