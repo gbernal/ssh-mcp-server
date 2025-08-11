@@ -48,6 +48,7 @@ NPM: [https://www.npmjs.com/package/@fangjunjie/ssh-mcp-server](https://www.npmj
   -P, --passphrase    私钥密码（如果有的话）
   -W, --whitelist     命令白名单，以逗号分隔的正则表达式
   -B, --blacklist     命令黑名单，以逗号分隔的正则表达式
+  -s, --socksProxy    SOCKS 代理地址 (e.g., socks://user:password@host:port)
 ```
 
 #### 🔑 使用密码
@@ -105,6 +106,27 @@ NPM: [https://www.npmjs.com/package/@fangjunjie/ssh-mcp-server](https://www.npmj
         "--username root",
         "--privateKey ~/.ssh/id_rsa",
         "--passphrase pwd123456"
+      ]
+    }
+  }
+}
+```
+
+#### 🌐 使用 SOCKS 代理
+
+```json
+{
+  "mcpServers": {
+    "ssh-mpc-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@fangjunjie/ssh-mcp-server",
+        "--host 192.168.1.1",
+        "--port 22",
+        "--username root",
+        "--password pwd123456",
+        "--socksProxy socks://username:password@proxy-host:proxy-port"
       ]
     }
   }

@@ -48,6 +48,8 @@ Options:
   -P, --passphrase    Private key passphrase (if any)
   -W, --whitelist     Command whitelist, comma-separated regular expressions
   -B, --blacklist     Command blacklist, comma-separated regular expressions
+  -s, --socksProxy    SOCKS proxy server address (e.g., socks://user:password@host:port)
+
 ```
 
 #### 🔑 Using Password
@@ -109,6 +111,28 @@ Options:
     }
   }
 }
+```
+
+#### 🌐 Using SOCKS Proxy
+
+```json
+{
+  "mcpServers": {
+    "ssh-mpc-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@fangjunjie/ssh-mcp-server",
+        "--host 192.168.1.1",
+        "--port 22",
+        "--username root",
+        "--password pwd123456",
+        "--socksProxy socks://username:password@proxy-host:proxy-port"
+      ]
+    }
+  }
+}
+
 ```
 
 #### 📝 Using Command Whitelist and Blacklist
