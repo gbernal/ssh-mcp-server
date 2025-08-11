@@ -1,4 +1,4 @@
-import { Client, ClientChannel } from "ssh2";
+import { Client, ClientChannel } from "ssh2";import { SocksClient } from "socks";
 import { SSHConfig, SshConnectionConfigMap } from "../models/types.js";
 import { Logger } from "../utils/logger.js";
 import fs from "fs";
@@ -70,7 +70,7 @@ export class SSHConnectionManager {
     }
     const config = this.getConfig(key);
     const client = new Client();
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>(async (resolve, reject) => {
       client.on("ready", () => {
         this.connected.set(key, true);
         Logger.log(`Successfully connected to SSH server [${key}] ${config.host}:${config.port}`);
@@ -89,6 +89,37 @@ export class SSHConnectionManager {
         port: config.port,
         username: config.username,
       };
+      // Add SOCKS proxy configuration if provided
+      if (config.socksProxy) {
+        try {
+          // Parse SOCKS proxy URL
+          const proxyUrl = new URL(config.socksProxy);
+          const proxyHost = proxyUrl.hostname;
+          const proxyPort = parseInt(proxyUrl.port, 10);
+
+          Logger.log(`Using SOCKS proxy for [${key}]: ${config.socksProxy}`, "info");
+
+          // Create SOCKS connection
+          const { socket } = await SocksClient.createConnection({
+            proxy: {
+              host: proxyHost,
+              port: proxyPort,
+              type: 5,
+            },
+            command: 'connect',
+            destination: {
+              host: config.host,
+              port: config.port
+            }
+          });
+
+          // Set the socket as the sock for SSH connection
+          sshConfig.sock = socket;
+          Logger.log(`SSH config object with SOCKS proxy: ${JSON.stringify(sshConfig, (k, v) => k === 'sock' ? '[Socket object]' : v)}`, "info");
+        } catch (err) {
+          return reject(new Error(`Failed to create SOCKS proxy connection for [${key}]: ${(err as Error).message}`));
+        }
+      }
       if (config.privateKey) {
         try {
           sshConfig.privateKey = fs.readFileSync(config.privateKey, "utf8");
@@ -339,4 +370,4 @@ export class SSHConnectionManager {
       };
     });
   }
-} 
+}

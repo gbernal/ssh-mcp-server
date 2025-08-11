@@ -22,6 +22,7 @@ export class CommandLineParser {
         passphrase: { type: "string", short: "P" },
         whitelist: { type: "string", short: "W" },
         blacklist: { type: "string", short: "B" },
+        socksProxy: { type: "string", short: "s" },
       },
       allowPositionals: true,
     });
@@ -61,6 +62,7 @@ export class CommandLineParser {
         password: conf.password,
         privateKey: conf.privateKey,
         passphrase: conf.passphrase,
+        socksProxy: conf.socksProxy,
         commandWhitelist: conf.whitelist ? conf.whitelist.split("|").map((s: string) => s.trim()).filter(Boolean) : undefined,
         commandBlacklist: conf.blacklist ? conf.blacklist.split("|").map((s: string) => s.trim()).filter(Boolean) : undefined,
       };
@@ -94,6 +96,7 @@ export class CommandLineParser {
         password,
         privateKey,
         passphrase,
+        socksProxy: values.socksProxy,
         commandWhitelist: whitelist
           ? whitelist.split(",").map((pattern) => pattern.trim()).filter(Boolean)
           : undefined,
