@@ -266,7 +266,7 @@ export class SSHConnectionManager {
     const client = await this.ensureConnected(name);
 
     // Configure execution options with defaults
-    const timeout = options.timeout || 10000; // Default 30 seconds timeout
+    const timeout = options.timeout || 30000; // Default 30 seconds timeout
     const forceKill = options.forceKill !== false; // Default enable force kill
 
     return new Promise<string>((resolve, reject) => {
