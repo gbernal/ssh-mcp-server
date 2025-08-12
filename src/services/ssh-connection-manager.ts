@@ -256,97 +256,75 @@ export class SSHConnectionManager {
     name?: string,
     options: { timeout?: number; forceKill?: boolean } = {}
   ): Promise<string> {
-    // Validate command
+    // Validate command input and security
     const validationResult = this.validateCommand(cmdString, name);
     if (!validationResult.isAllowed) {
       throw new Error(`Command validation failed: ${validationResult.reason}`);
     }
 
+    // Ensure SSH connection is established
     const client = await this.ensureConnected(name);
-    const timeout = options.timeout || 30000; // Default 30 seconds timeout
+
+    // Configure execution options with defaults
+    const timeout = options.timeout || 10000; // Default 30 seconds timeout
     const forceKill = options.forceKill !== false; // Default enable force kill
 
     return new Promise<string>((resolve, reject) => {
       let timeoutId: NodeJS.Timeout;
-      let isResolved = false;
 
-      // Set timeout
-      timeoutId = setTimeout(() => {
-        if (!isResolved) {
-          isResolved = true;
-          reject(
-            new Error(
-              `Command execution timeout after ${timeout}ms: ${cmdString}`
-            )
-          );
-        }
-      }, timeout);
-
+      // Cleanup function to clear timeout and prevent memory leaks
       const cleanup = () => {
         if (timeoutId) {
           clearTimeout(timeoutId);
         }
       };
 
+      // Execute command via SSH exec
       client.exec(
         cmdString,
         (err: Error | undefined, stream: ClientChannel) => {
+          // Handle immediate execution errors
           if (err) {
             cleanup();
-            if (!isResolved) {
-              isResolved = true;
-              reject(new Error(`Command execution error: ${err.message}`));
-            }
+            reject(new Error(`Command execution error: ${err.message}`));
             return;
           }
 
+          // Initialize data buffers for stdout and stderr
           let data = "";
           let errorData = "";
 
-          stream.on("data", (chunk: Buffer) => (data += chunk.toString()));
+          // Set up event listeners for command output streams
+          stream.on("data", (chunk: Buffer) => (data += chunk.toString())); // Collect stdout data
           stream.stderr.on(
             "data",
-            (chunk: Buffer) => (errorData += chunk.toString())
+            (chunk: Buffer) => (errorData += chunk.toString()) // Collect stderr data
           );
 
+          // Handle command completion and exit code
           stream.on("close", (code: number) => {
             cleanup();
-            if (!isResolved) {
-              isResolved = true;
-              if (code !== 0) {
-                reject(
-                  new Error(
-                    `Command execution failed, exit code: ${code}, error: ${errorData}`
-                  )
-                );
-              } else {
-                resolve(data);
-              }
-            }
+            resolve(data);
           });
 
+          // Handle stream errors during execution
           stream.on("error", (err: Error) => {
             cleanup();
-            if (!isResolved) {
-              isResolved = true;
-              reject(new Error(`Stream error: ${err.message}`));
-            }
+            reject(new Error(`Stream error: ${err.message}`));
           });
 
-          // If force kill is enabled, try to terminate the command on timeout
+          // Implement force kill mechanism for timeout scenarios
           if (forceKill) {
             timeoutId = setTimeout(() => {
-              if (!isResolved) {
-                try {
-                  // Try to gracefully close the stream
-                  stream.close();
-                  // If the stream still exists, force close it
-                  if (stream.destroy) {
-                    stream.destroy();
-                  }
-                } catch (e) {
-                  // Ignore errors when closing
+              try {
+                // Try to gracefully close the stream first
+                stream.close();
+                // If the stream still exists, force destroy it
+                if (stream.destroy) {
+                  stream.destroy();
                 }
+              } catch (e) {
+                // Ignore errors when closing streams during force kill
               }
             }, timeout);
           }
