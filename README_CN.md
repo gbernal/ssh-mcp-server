@@ -213,8 +213,7 @@ npx @fangjunjie/ssh-mcp-server \
   "params": {
     "cmdString": "ping -c 10 127.0.0.1",
     "connectionName": "prod",
-    "timeout": 5000,
-    "forceKill": true
+    "timeout": 5000
   }
 }
 ```
@@ -224,7 +223,6 @@ npx @fangjunjie/ssh-mcp-server \
 `execute-command` 工具支持超时选项，防止命令无限期挂起：
 
 - **timeout**: 命令执行超时时间（毫秒，可选，默认为30000ms）
-- **forceKill**: 超时时强制终止命令（可选，默认为true）
 
 这对于像 `ping`、`tail -f` 或其他可能阻塞执行的长时间运行进程特别有用。
 

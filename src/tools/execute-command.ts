@@ -24,19 +24,15 @@ export function registerExecuteCommandTool(server: McpServer): void {
         .describe(
           "Command execution timeout in milliseconds (optional, default is 30000ms)"
         ),
-      forceKill: z
-        .boolean()
-        .optional()
-        .describe("Force kill command on timeout (optional, default is true)"),
+
     },
-    async ({ cmdString, connectionName, timeout, forceKill }) => {
+    async ({ cmdString, connectionName, timeout }) => {
       try {
         const result = await sshManager.executeCommand(
           cmdString,
           connectionName,
           {
             timeout,
-            forceKill,
           }
         );
         return {

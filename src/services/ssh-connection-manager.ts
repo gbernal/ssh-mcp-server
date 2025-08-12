@@ -254,7 +254,7 @@ export class SSHConnectionManager {
   public async executeCommand(
     cmdString: string,
     name?: string,
-    options: { timeout?: number; forceKill?: boolean } = {}
+    options: { timeout?: number } = {}
   ): Promise<string> {
     // Validate command input and security
     const validationResult = this.validateCommand(cmdString, name);
@@ -267,7 +267,6 @@ export class SSHConnectionManager {
 
     // Configure execution options with defaults
     const timeout = options.timeout || 30000; // Default 30 seconds timeout
-    const forceKill = options.forceKill !== false; // Default enable force kill
 
     return new Promise<string>((resolve, reject) => {
       let timeoutId: NodeJS.Timeout;
@@ -313,21 +312,15 @@ export class SSHConnectionManager {
             reject(new Error(`Stream error: ${err.message}`));
           });
 
-          // Implement force kill mechanism for timeout scenarios
-          if (forceKill) {
-            timeoutId = setTimeout(() => {
-              try {
-                // Try to gracefully close the stream first
-                stream.close();
-                // If the stream still exists, force destroy it
-                if (stream.destroy) {
-                  stream.destroy();
-                }
-              } catch (e) {
-                // Ignore errors when closing streams during force kill
-              }
-            }, timeout);
-          }
+          // Set timeout for command execution
+          timeoutId = setTimeout(() => {
+            try {
+              // Try to gracefully close the stream first
+              stream.close();
+            } catch (e) {
+              // Ignore errors when closing streams during timeout
+            }
+          }, timeout);
         }
       );
     });

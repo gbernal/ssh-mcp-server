@@ -215,8 +215,7 @@ Example (execute command with timeout options):
   "params": {
     "cmdString": "ping -c 10 127.0.0.1",
     "connectionName": "prod",
-    "timeout": 5000,
-    "forceKill": true
+    "timeout": 5000
   }
 }
 ```
@@ -226,7 +225,6 @@ Example (execute command with timeout options):
 The `execute-command` tool supports timeout options to prevent commands from hanging indefinitely:
 
 - **timeout**: Command execution timeout in milliseconds (optional, default is 30000ms)
-- **forceKill**: Force kill command on timeout (optional, default is true)
 
 This is particularly useful for commands like `ping`, `tail -f`, or other long-running processes that might block execution.
 
