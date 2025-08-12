@@ -13,7 +13,7 @@ export class CommandLineParser {
       args: process.argv.slice(2),
       options: {
         ssh: { type: "string", multiple: true },
-        // 兼容单连接老参数
+        // Compatible with single connection legacy parameters
         host: { type: "string", short: "h" },
         port: { type: "string", short: "p" },
         username: { type: "string", short: "u" },
@@ -35,9 +35,9 @@ export class CommandLineParser {
 
     const configMap: SshConnectionConfigMap = {};
 
-    // 解析多次--ssh参数
+    // Parse multiple --ssh parameters
     for (const sshStr of sshParams) {
-      // 解析格式 name=dev,host=1.2.3.4,port=22,user=alice,password=xxx
+      // Parse format: name=dev,host=1.2.3.4,port=22,user=alice,password=xxx
       const parts = sshStr.split(",");
       const conf: any = {};
       for (const part of parts) {
@@ -46,13 +46,15 @@ export class CommandLineParser {
           conf[k.trim()] = v.trim();
         }
       }
-      // 必须有name、host、port、user
+      // Must have name, host, port, user
       if (!conf.name || !conf.host || !conf.port || !conf.user) {
         throw new Error("Each --ssh must include name, host, port, user");
       }
       const port = parseInt(conf.port, 10);
       if (isNaN(port)) {
-        throw new Error(`Port for connection ${conf.name} must be a valid number`);
+        throw new Error(
+          `Port for connection ${conf.name} must be a valid number`
+        );
       }
       configMap[conf.name] = {
         name: conf.name,
@@ -63,12 +65,22 @@ export class CommandLineParser {
         privateKey: conf.privateKey,
         passphrase: conf.passphrase,
         socksProxy: conf.socksProxy,
-        commandWhitelist: conf.whitelist ? conf.whitelist.split("|").map((s: string) => s.trim()).filter(Boolean) : undefined,
-        commandBlacklist: conf.blacklist ? conf.blacklist.split("|").map((s: string) => s.trim()).filter(Boolean) : undefined,
+        commandWhitelist: conf.whitelist
+          ? conf.whitelist
+              .split("|")
+              .map((s: string) => s.trim())
+              .filter(Boolean)
+          : undefined,
+        commandBlacklist: conf.blacklist
+          ? conf.blacklist
+              .split("|")
+              .map((s: string) => s.trim())
+              .filter(Boolean)
+          : undefined,
       };
     }
 
-    // 兼容单连接老参数
+    // Compatible with single connection legacy parameters
     if (Object.keys(configMap).length === 0) {
       const host = values.host || positionals[0];
       const portStr = values.port || positionals[1];
@@ -80,7 +92,9 @@ export class CommandLineParser {
       const blacklist = values.blacklist;
 
       if (!host || !portStr || !username || (!password && !privateKey)) {
-        throw new Error("Missing required parameters, need to provide host, port, username and password or private key");
+        throw new Error(
+          "Missing required parameters, need to provide host, port, username and password or private key"
+        );
       }
 
       const port = parseInt(portStr, 10);
@@ -98,10 +112,16 @@ export class CommandLineParser {
         passphrase,
         socksProxy: values.socksProxy,
         commandWhitelist: whitelist
-          ? whitelist.split(",").map((pattern) => pattern.trim()).filter(Boolean)
+          ? whitelist
+              .split(",")
+              .map((pattern) => pattern.trim())
+              .filter(Boolean)
           : undefined,
         commandBlacklist: blacklist
-          ? blacklist.split(",").map((pattern) => pattern.trim()).filter(Boolean)
+          ? blacklist
+              .split(",")
+              .map((pattern) => pattern.trim())
+              .filter(Boolean)
           : undefined,
       };
     }

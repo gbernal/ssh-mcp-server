@@ -207,6 +207,29 @@ Example (execute command on 'prod' connection):
 }
 ```
 
+Example (execute command with timeout options):
+
+```json
+{
+  "tool": "execute-command",
+  "params": {
+    "cmdString": "ping -c 10 127.0.0.1",
+    "connectionName": "prod",
+    "timeout": 5000,
+    "forceKill": true
+  }
+}
+```
+
+### ⏱️ Command Execution Timeout
+
+The `execute-command` tool supports timeout options to prevent commands from hanging indefinitely:
+
+- **timeout**: Command execution timeout in milliseconds (optional, default is 30000ms)
+- **forceKill**: Force kill command on timeout (optional, default is true)
+
+This is particularly useful for commands like `ping`, `tail -f`, or other long-running processes that might block execution.
+
 ### 🗂️ List All SSH Servers
 
 You can use the MCP tool `list-servers` to get all available SSH server configurations:
@@ -233,7 +256,7 @@ Example response:
 
 This server provides powerful capabilities to execute commands and transfer files on remote servers. To ensure it is used securely, please consider the following:
 
-*   **Command Whitelisting**: It is *strongly recommended* to use the `--whitelist` option to restrict the set of commands that can be executed. Without a whitelist, any command can be executed on the remote server, which can be a significant security risk.
-*   **Private Key Security**: The server reads the SSH private key into memory. Ensure that the machine running the `ssh-mcp-server` is secure. Do not expose the server to untrusted networks.
-*   **Denial of Service (DoS)**: The server does not have built-in rate limiting. An attacker could potentially launch a DoS attack by flooding the server with connection requests or large file transfers. It is recommended to run the server behind a firewall or reverse proxy with rate-limiting capabilities.
-*   **Path Traversal**: The server has built-in protection against path traversal attacks on the local filesystem. However, it is still important to be mindful of the paths used in `upload` and `download` commands.
+- **Command Whitelisting**: It is *strongly recommended* to use the `--whitelist` option to restrict the set of commands that can be executed. Without a whitelist, any command can be executed on the remote server, which can be a significant security risk.
+- **Private Key Security**: The server reads the SSH private key into memory. Ensure that the machine running the `ssh-mcp-server` is secure. Do not expose the server to untrusted networks.
+- **Denial of Service (DoS)**: The server does not have built-in rate limiting. An attacker could potentially launch a DoS attack by flooding the server with connection requests or large file transfers. It is recommended to run the server behind a firewall or reverse proxy with rate-limiting capabilities.
+- **Path Traversal**: The server has built-in protection against path traversal attacks on the local filesystem. However, it is still important to be mindful of the paths used in `upload` and `download` commands.

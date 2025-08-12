@@ -1,4 +1,5 @@
-import { Client, ClientChannel } from "ssh2";import { SocksClient } from "socks";
+import { Client, ClientChannel } from "ssh2";
+import { SocksClient } from "socks";
 import { SSHConfig, SshConnectionConfigMap } from "../models/types.js";
 import { Logger } from "../utils/logger.js";
 import fs from "fs";
@@ -28,9 +29,12 @@ export class SSHConnectionManager {
   }
 
   /**
-   * 批量设置SSH配置
+   * Batch set SSH configurations
    */
-  public setConfig(configs: SshConnectionConfigMap, defaultName?: string): void {
+  public setConfig(
+    configs: SshConnectionConfigMap,
+    defaultName?: string
+  ): void {
     this.configs = configs;
     if (defaultName && configs[defaultName]) {
       this.defaultName = defaultName;
@@ -40,7 +44,7 @@ export class SSHConnectionManager {
   }
 
   /**
-   * 获取指定连接配置
+   * Get specified connection configuration
    */
   public getConfig(name?: string): SSHConfig {
     const key = name || this.defaultName;
@@ -51,7 +55,7 @@ export class SSHConnectionManager {
   }
 
   /**
-   * 批量连接所有配置的SSH
+   * Batch connect all configured SSH connections
    */
   public async connectAll(): Promise<void> {
     const names = Object.keys(this.configs);
@@ -61,7 +65,7 @@ export class SSHConnectionManager {
   }
 
   /**
-   * 连接指定名称的SSH
+   * Connect to SSH with specified name
    */
   public async connect(name?: string): Promise<void> {
     const key = name || this.defaultName;
@@ -73,7 +77,9 @@ export class SSHConnectionManager {
     await new Promise<void>(async (resolve, reject) => {
       client.on("ready", () => {
         this.connected.set(key, true);
-        Logger.log(`Successfully connected to SSH server [${key}] ${config.host}:${config.port}`);
+        Logger.log(
+          `Successfully connected to SSH server [${key}] ${config.host}:${config.port}`
+        );
         resolve();
       });
       client.on("error", (err: Error) => {
@@ -97,7 +103,10 @@ export class SSHConnectionManager {
           const proxyHost = proxyUrl.hostname;
           const proxyPort = parseInt(proxyUrl.port, 10);
 
-          Logger.log(`Using SOCKS proxy for [${key}]: ${config.socksProxy}`, "info");
+          Logger.log(
+            `Using SOCKS proxy for [${key}]: ${config.socksProxy}`,
+            "info"
+          );
 
           // Create SOCKS connection
           const { socket } = await SocksClient.createConnection({
@@ -106,18 +115,30 @@ export class SSHConnectionManager {
               port: proxyPort,
               type: 5,
             },
-            command: 'connect',
+            command: "connect",
             destination: {
               host: config.host,
-              port: config.port
-            }
+              port: config.port,
+            },
           });
 
           // Set the socket as the sock for SSH connection
           sshConfig.sock = socket;
-          Logger.log(`SSH config object with SOCKS proxy: ${JSON.stringify(sshConfig, (k, v) => k === 'sock' ? '[Socket object]' : v)}`, "info");
+          Logger.log(
+            `SSH config object with SOCKS proxy: ${JSON.stringify(
+              sshConfig,
+              (k, v) => (k === "sock" ? "[Socket object]" : v)
+            )}`,
+            "info"
+          );
         } catch (err) {
-          return reject(new Error(`Failed to create SOCKS proxy connection for [${key}]: ${(err as Error).message}`));
+          return reject(
+            new Error(
+              `Failed to create SOCKS proxy connection for [${key}]: ${
+                (err as Error).message
+              }`
+            )
+          );
         }
       }
       if (config.privateKey) {
@@ -126,15 +147,28 @@ export class SSHConnectionManager {
           if (config.passphrase) {
             sshConfig.passphrase = config.passphrase;
           }
-          Logger.log(`Using SSH private key authentication for [${key}]`, "info");
+          Logger.log(
+            `Using SSH private key authentication for [${key}]`,
+            "info"
+          );
         } catch (err) {
-          return reject(new Error(`Failed to read private key file for [${key}]: ${(err as Error).message}`));
+          return reject(
+            new Error(
+              `Failed to read private key file for [${key}]: ${
+                (err as Error).message
+              }`
+            )
+          );
         }
       } else if (config.password) {
         sshConfig.password = config.password;
         Logger.log(`Using password authentication for [${key}]`, "info");
       } else {
-        return reject(new Error(`No valid authentication method provided for [${key}] (password or private key)`));
+        return reject(
+          new Error(
+            `No valid authentication method provided for [${key}] (password or private key)`
+          )
+        );
       }
       client.connect(sshConfig);
     });
@@ -142,7 +176,7 @@ export class SSHConnectionManager {
   }
 
   /**
-   * 获取指定名称的SSH Client
+   * Get SSH Client with specified name
    */
   public getClient(name?: string): Client {
     const key = name || this.defaultName;
@@ -169,83 +203,153 @@ export class SSHConnectionManager {
     return client;
   }
 
-  private validateCommand(command: string, name?: string): { isAllowed: boolean; reason?: string } {
+  private validateCommand(
+    command: string,
+    name?: string
+  ): { isAllowed: boolean; reason?: string } {
     // Prevent command chaining
     if (/[;&|]/.test(command)) {
       return {
         isAllowed: false,
-        reason: "Command chaining is not allowed."
+        reason: "Command chaining is not allowed.",
       };
     }
 
     const config = this.getConfig(name);
     // Check whitelist (if whitelist is configured, command must match one of the patterns to be allowed)
     if (config.commandWhitelist && config.commandWhitelist.length > 0) {
-      const matchesWhitelist = config.commandWhitelist.some(pattern => {
+      const matchesWhitelist = config.commandWhitelist.some((pattern) => {
         const regex = new RegExp(pattern);
         return regex.test(command);
       });
       if (!matchesWhitelist) {
         return {
           isAllowed: false,
-          reason: "Command not in whitelist, execution forbidden"
+          reason: "Command not in whitelist, execution forbidden",
         };
       }
     }
     // Check blacklist (if command matches any pattern in blacklist, execution is forbidden)
     if (config.commandBlacklist && config.commandBlacklist.length > 0) {
-      const matchesBlacklist = config.commandBlacklist.some(pattern => {
+      const matchesBlacklist = config.commandBlacklist.some((pattern) => {
         const regex = new RegExp(pattern);
         return regex.test(command);
       });
       if (matchesBlacklist) {
         return {
           isAllowed: false,
-          reason: "Command matches blacklist, execution forbidden"
+          reason: "Command matches blacklist, execution forbidden",
         };
       }
     }
     // Validation passed
     return {
-      isAllowed: true
+      isAllowed: true,
     };
   }
 
   /**
    * Execute SSH command
    */
-  public async executeCommand(cmdString: string, name?: string): Promise<string> {
+  public async executeCommand(
+    cmdString: string,
+    name?: string,
+    options: { timeout?: number; forceKill?: boolean } = {}
+  ): Promise<string> {
     // Validate command
     const validationResult = this.validateCommand(cmdString, name);
     if (!validationResult.isAllowed) {
       throw new Error(`Command validation failed: ${validationResult.reason}`);
     }
+
     const client = await this.ensureConnected(name);
+    const timeout = options.timeout || 30000; // Default 30 seconds timeout
+    const forceKill = options.forceKill !== false; // Default enable force kill
+
     return new Promise<string>((resolve, reject) => {
+      let timeoutId: NodeJS.Timeout;
+      let isResolved = false;
+
+      // Set timeout
+      timeoutId = setTimeout(() => {
+        if (!isResolved) {
+          isResolved = true;
+          reject(
+            new Error(
+              `Command execution timeout after ${timeout}ms: ${cmdString}`
+            )
+          );
+        }
+      }, timeout);
+
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      };
+
       client.exec(
         cmdString,
         (err: Error | undefined, stream: ClientChannel) => {
           if (err) {
-            return reject(new Error(`Command execution error: ${err.message}`));
+            cleanup();
+            if (!isResolved) {
+              isResolved = true;
+              reject(new Error(`Command execution error: ${err.message}`));
+            }
+            return;
           }
+
           let data = "";
           let errorData = "";
+
           stream.on("data", (chunk: Buffer) => (data += chunk.toString()));
           stream.stderr.on(
             "data",
             (chunk: Buffer) => (errorData += chunk.toString())
           );
+
           stream.on("close", (code: number) => {
-            if (code !== 0) {
-              return reject(
-                new Error(`Command execution failed, exit code: ${code}, error: ${errorData}`)
-              );
+            cleanup();
+            if (!isResolved) {
+              isResolved = true;
+              if (code !== 0) {
+                reject(
+                  new Error(
+                    `Command execution failed, exit code: ${code}, error: ${errorData}`
+                  )
+                );
+              } else {
+                resolve(data);
+              }
             }
-            resolve(data);
           });
+
           stream.on("error", (err: Error) => {
-            reject(new Error(`Stream error: ${err.message}`));
+            cleanup();
+            if (!isResolved) {
+              isResolved = true;
+              reject(new Error(`Stream error: ${err.message}`));
+            }
           });
+
+          // If force kill is enabled, try to terminate the command on timeout
+          if (forceKill) {
+            timeoutId = setTimeout(() => {
+              if (!isResolved) {
+                try {
+                  // Try to gracefully close the stream
+                  stream.close();
+                  // If the stream still exists, force close it
+                  if (stream.destroy) {
+                    stream.destroy();
+                  }
+                } catch (e) {
+                  // Ignore errors when closing
+                }
+              }
+            }, timeout);
+          }
         }
       );
     });
@@ -258,7 +362,9 @@ export class SSHConnectionManager {
     const resolvedPath = path.resolve(localPath);
     const workingDir = process.cwd();
     if (!resolvedPath.startsWith(workingDir)) {
-      throw new Error(`Path traversal detected. Local path must be within the working directory.`);
+      throw new Error(
+        `Path traversal detected. Local path must be within the working directory.`
+      );
     }
     return resolvedPath;
   }
@@ -266,7 +372,11 @@ export class SSHConnectionManager {
   /**
    * Upload file
    */
-  public async upload(localPath: string, remotePath: string, name?: string): Promise<string> {
+  public async upload(
+    localPath: string,
+    remotePath: string,
+    name?: string
+  ): Promise<string> {
     const validatedLocalPath = this.validateLocalPath(localPath);
     const client = await this.ensureConnected(name);
 
@@ -306,7 +416,11 @@ export class SSHConnectionManager {
   /**
    * Download file
    */
-  public async download(remotePath: string, localPath: string, name?: string): Promise<string> {
+  public async download(
+    remotePath: string,
+    localPath: string,
+    name?: string
+  ): Promise<string> {
     const validatedLocalPath = this.validateLocalPath(localPath);
     const client = await this.ensureConnected(name);
 
@@ -356,17 +470,23 @@ export class SSHConnectionManager {
   }
 
   /**
-   * 获取所有已配置服务器的基本信息
+   * Get basic information of all configured servers
    */
-  public getAllServerInfos(): Array<{ name: string; host: string; port: number; username: string; connected: boolean }> {
-    return Object.keys(this.configs).map(key => {
+  public getAllServerInfos(): Array<{
+    name: string;
+    host: string;
+    port: number;
+    username: string;
+    connected: boolean;
+  }> {
+    return Object.keys(this.configs).map((key) => {
       const config = this.configs[key];
       return {
         name: key,
         host: config.host,
         port: config.port,
         username: config.username,
-        connected: this.connected.get(key) === true
+        connected: this.connected.get(key) === true,
       };
     });
   }

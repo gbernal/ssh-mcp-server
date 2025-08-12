@@ -2,7 +2,7 @@
  * SSH connection configuration interface
  */
 export interface SSHConfig {
-  name?: string; // 连接名称，可选，兼容单连接
+  name?: string; // Connection name, optional, compatible with single connection
   host: string;
   port: number;
   username: string;
@@ -15,7 +15,7 @@ export interface SSHConfig {
 }
 
 /**
- * 多SSH连接配置Map
+ * Multiple SSH connection configuration Map
  */
 export type SshConnectionConfigMap = Record<string, SSHConfig>;
 
