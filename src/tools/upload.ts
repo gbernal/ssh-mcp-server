@@ -15,10 +15,11 @@ export function registerUploadTool(server: McpServer): void {
     {
       localPath: z.string().describe("Local path"),
       remotePath: z.string().describe("Remote path"),
+      connectionName: z.string().optional().describe("SSH connection name (optional, default is 'default')"),
     },
-    async ({ localPath, remotePath }) => {
+    async ({ localPath, remotePath, connectionName }) => {
       try {
-        const result = await sshManager.upload(localPath, remotePath);
+        const result = await sshManager.upload(localPath, remotePath, connectionName);
         return {
           content: [{ type: "text", text: result }],
         };

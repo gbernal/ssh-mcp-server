@@ -30,6 +30,7 @@ NPM: [https://www.npmjs.com/package/@fangjunjie/ssh-mcp-server](https://www.npmj
 | execute-command | 命令执行工具 | 在远程服务器上执行 SSH 命令并获取执行结果 |
 | upload | 文件上传工具 | 将本地文件上传到远程服务器指定位置 |
 | download | 文件下载工具 | 从远程服务器下载文件到本地指定位置 |
+| list-servers | 服务器列表工具 | 列出所有可用SSH服务器配置 |
 
 ## 📚 使用方法
 
@@ -47,6 +48,7 @@ NPM: [https://www.npmjs.com/package/@fangjunjie/ssh-mcp-server](https://www.npmj
   -P, --passphrase    私钥密码（如果有的话）
   -W, --whitelist     命令白名单，以逗号分隔的正则表达式
   -B, --blacklist     命令黑名单，以逗号分隔的正则表达式
+  -s, --socksProxy    SOCKS 代理地址 (e.g., socks://user:password@host:port)
 ```
 
 #### 🔑 使用密码
@@ -110,6 +112,27 @@ NPM: [https://www.npmjs.com/package/@fangjunjie/ssh-mcp-server](https://www.npmj
 }
 ```
 
+#### 🌐 使用 SOCKS 代理
+
+```json
+{
+  "mcpServers": {
+    "ssh-mpc-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@fangjunjie/ssh-mcp-server",
+        "--host 192.168.1.1",
+        "--port 22",
+        "--username root",
+        "--password pwd123456",
+        "--socksProxy socks://username:password@proxy-host:proxy-port"
+      ]
+    }
+  }
+}
+```
+
 #### 📝 使用命令白名单和黑名单
 
 使用 `--whitelist` 和 `--blacklist` 参数可以限制可执行的命令范围，多个模式之间用逗号分隔。每个模式都是一个正则表达式，用于匹配命令。
@@ -157,6 +180,73 @@ NPM: [https://www.npmjs.com/package/@fangjunjie/ssh-mcp-server](https://www.npmj
 ```
 
 > 注意：如果同时指定了白名单和黑名单，系统会先检查命令是否在白名单中，然后再检查是否在黑名单中。命令必须同时通过两项检查才能被执行。
+
+### 🧩 多SSH连接用法示例
+
+可以通过多次 --ssh 参数指定多个SSH连接，每个连接需有唯一name：
+
+```bash
+npx @fangjunjie/ssh-mcp-server \
+  --ssh "name=dev,host=1.2.3.4,port=22,user=alice,password=xxx" \
+  --ssh "name=prod,host=5.6.7.8,port=22,user=bob,password=yyy"
+```
+
+在MCP工具调用时，通过 `connectionName` 参数指定目标连接名称，未指定时使用默认连接。
+
+示例（在prod连接上执行命令）：
+
+```json
+{
+  "tool": "execute-command",
+  "params": {
+    "cmdString": "ls -al",
+    "connectionName": "prod"
+  }
+}
+```
+
+示例（带超时选项的命令执行）：
+
+```json
+{
+  "tool": "execute-command",
+  "params": {
+    "cmdString": "ping -c 10 127.0.0.1",
+    "connectionName": "prod",
+    "timeout": 5000
+  }
+}
+```
+
+### ⏱️ 命令执行超时
+
+`execute-command` 工具支持超时选项，防止命令无限期挂起：
+
+- **timeout**: 命令执行超时时间（毫秒，可选，默认为30000ms）
+
+这对于像 `ping`、`tail -f` 或其他可能阻塞执行的长时间运行进程特别有用。
+
+### 🗂️ 列出所有SSH服务器
+
+可以通过MCP工具 `list-servers` 获取所有可用的SSH服务器配置：
+
+调用示例：
+
+```json
+{
+  "tool": "list-servers",
+  "params": {}
+}
+```
+
+返回示例：
+
+```json
+[
+  { "name": "dev", "host": "1.2.3.4", "port": 22, "username": "alice" },
+  { "name": "prod", "host": "5.6.7.8", "port": 22, "username": "bob" }
+]
+```
 
 ## 🎮 演示
 
