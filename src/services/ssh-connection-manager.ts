@@ -13,7 +13,10 @@ export class SSHConnectionManager {
   private static instance: SSHConnectionManager;
   private client: Client | null = null;
   private config: SSHConfig | null = null;
-  private connected = false;
+  private configs: SshConnectionConfigMap = {};
+  private defaultName: string = "";
+  private clients: Map<string, Client> = new Map();
+  private connected: Map<string, boolean> = new Map();
   
   // --- Reconnection Logic Properties ---
   private manualDisconnect = false;
@@ -468,7 +471,20 @@ export class SSHConnectionManager {
       this.manualDisconnect = true; // Set flag to prevent reconnection
       this.client.end();
       this.client = null;
-      this.connected = false;
+      // If disconnecting all, clear all connections
+      this.connected.clear();
     }
+  }
+
+  /**
+   * Get all server infos (stub implementation)
+   */
+  public getAllServerInfos(): any {
+    // Return basic info for all configs
+    return Object.keys(this.configs).map((key) => ({
+      name: key,
+      config: this.configs[key],
+      connected: this.connected.get(key) || false
+    }));
   }
 }

@@ -6,6 +6,31 @@ import { SSHConfig, SshConnectionConfigMap } from "../models/types.js";
  */
 export class CommandLineParser {
   /**
+   * Parse key-value arguments separated by "--"
+   * Format: ["key", "value", "--", "key2", "value2", "--", ...]
+   */
+  private static parseKeyValueArgs(positionals: string[]): Record<string, string> {
+    const result: Record<string, string> = {};
+    
+    for (let i = 0; i < positionals.length; i += 3) {
+      const key = positionals[i];
+      const value = positionals[i + 1];
+      const separator = positionals[i + 2];
+      
+      if (key && value) {
+        result[key] = value;
+      }
+      
+      // If there's no separator or it's not "--", we've reached the end or different format
+      if (separator !== "--") {
+        break;
+      }
+    }
+    
+    return result;
+  }
+
+  /**
    * Parse command line arguments
    */
   public static parseArgs(): SshConnectionConfigMap {
@@ -82,14 +107,17 @@ export class CommandLineParser {
 
     // Compatible with single connection legacy parameters
     if (Object.keys(configMap).length === 0) {
-      const host = values.host || positionals[0];
-      const portStr = values.port || positionals[1];
-      const username = values.username || positionals[2];
-      const password = values.password || positionals[3];
-      const privateKey = values.privateKey;
-      const passphrase = values.passphrase;
-      const whitelist = values.whitelist;
-      const blacklist = values.blacklist;
+      // Parse key-value pairs separated by "--"
+      const parsedArgs = this.parseKeyValueArgs(positionals);
+      
+      const host = values.host || parsedArgs.host || positionals[0];
+      const portStr = values.port || parsedArgs.port || positionals[1];
+      const username = values.username || parsedArgs.username || positionals[2];
+      const password = values.password || parsedArgs.password || positionals[3];
+      const privateKey = values.privateKey || parsedArgs.privateKey;
+      const passphrase = values.passphrase || parsedArgs.passphrase;
+      const whitelist = values.whitelist || parsedArgs.whitelist;
+      const blacklist = values.blacklist || parsedArgs.blacklist;
 
       if (!host || !portStr || !username || (!password && !privateKey)) {
         throw new Error(
@@ -110,7 +138,7 @@ export class CommandLineParser {
         password,
         privateKey,
         passphrase,
-        socksProxy: values.socksProxy,
+        socksProxy: values.socksProxy || parsedArgs.socksProxy,
         commandWhitelist: whitelist
           ? whitelist
               .split(",")
