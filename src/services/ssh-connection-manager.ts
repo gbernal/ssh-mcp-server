@@ -12,6 +12,7 @@ export class SSHConnectionManager {
   private client: Client | null = null;
   private config: SSHConfig | null = null;
   private connected = false;
+  private closing = false;
   
   // --- Reconnection Logic Properties ---
   private manualDisconnect = false;
@@ -321,11 +322,13 @@ export class SSHConnectionManager {
    * Disconnect SSH connection
    */
   public disconnect(): void {
-    if (this.client) {
+    if (this.client && !this.closing) {
+      this.closing = true;
       this.manualDisconnect = true; // Set flag to prevent reconnection
       this.client.end();
       this.client = null;
       this.connected = false;
+      setTimeout(() => { this.closing = false; }, 1000); // Reset closing flag after 1s
     }
   }
 }
