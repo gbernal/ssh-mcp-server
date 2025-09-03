@@ -1,7 +1,9 @@
 import { Client, ClientChannel } from "ssh2";
-import { SSHConfig } from "../models/types.js";
+import { SocksClient } from "socks";
+import { SSHConfig, SshConnectionConfigMap } from "../models/types.js";
 import { Logger } from "../utils/logger.js";
 import fs from "fs";
+import path from "path";
 import { SFTPWrapper } from "ssh2";
 
 /**
@@ -9,15 +11,10 @@ import { SFTPWrapper } from "ssh2";
  */
 export class SSHConnectionManager {
   private static instance: SSHConnectionManager;
-  private client: Client | null = null;
-  private config: SSHConfig | null = null;
-  private connected = false;
-  
-  // --- Reconnection Logic Properties ---
-  private manualDisconnect = false;
-  private reconnectAttempts = 0;
-  private readonly maxReconnectAttempts = 10; // Max number of retries
-  private readonly reconnectDelay = 5000; // Initial delay of 5 seconds
+  private clients: Map<string, Client> = new Map();
+  private configs: SshConnectionConfigMap = {};
+  private connected: Map<string, boolean> = new Map();
+  private defaultName: string = "default";
 
   private constructor() {}
 
@@ -32,66 +29,67 @@ export class SSHConnectionManager {
   }
 
   /**
-   * Set SSH configuration
+   * Batch set SSH configurations
    */
-  public setConfig(config: SSHConfig): void {
-    this.config = config;
-  }
-
-  /**
-   * Get SSH configuration
-   */
-  public getConfig(): SSHConfig {
-    if (!this.config) {
-      throw new Error("SSH configuration not set");
+  public setConfig(
+    configs: SshConnectionConfigMap,
+    defaultName?: string
+  ): void {
+    this.configs = configs;
+    if (defaultName && configs[defaultName]) {
+      this.defaultName = defaultName;
+    } else if (Object.keys(configs).length > 0) {
+      this.defaultName = Object.keys(configs)[0];
     }
-    return this.config;
   }
 
   /**
-   * Connect to SSH server
+   * Get specified connection configuration
    */
-  public async connect(): Promise<void> {
-    if (this.connected && this.client) {
+  public getConfig(name?: string): SSHConfig {
+    const key = name || this.defaultName;
+    if (!this.configs[key]) {
+      throw new Error(`SSH configuration for '${key}' not set`);
+    }
+    return this.configs[key];
+  }
+
+  /**
+   * Batch connect all configured SSH connections
+   */
+  public async connectAll(): Promise<void> {
+    const names = Object.keys(this.configs);
+    for (const name of names) {
+      await this.connect(name);
+    }
+  }
+
+  /**
+   * Connect to SSH with specified name
+   */
+  public async connect(name?: string): Promise<void> {
+    const key = name || this.defaultName;
+    if (this.connected.get(key) && this.clients.get(key)) {
       return;
     }
-
-    const config = this.getConfig();
-    this.manualDisconnect = false; // Reset flag on new connection attempt
-    this.client = new Client();
-
-    await new Promise<void>((resolve, reject) => {
-      if (!this.client) {
-        return reject(new Error("SSH client not initialized"));
-      }
-
-      const initialErrorHandler = (err: Error) => {
-          // Only reject the promise for the very first connection attempt.
-          // Subsequent reconnection errors will be handled by the 'close' event.
-          if (this.reconnectAttempts === 0) {
-            reject(new Error(`SSH connection failed: ${err.message}`));
-          }
-      };
-
-      this.client.on("ready", () => {
-        this.connected = true;
-        this.reconnectAttempts = 0; // Reset counter on a successful connection
-        Logger.log(`Successfully connected to SSH server ${config.host}:${config.port}`);
-        this.client?.removeListener("error", initialErrorHandler); // Clean up listener
+    const config = this.getConfig(key);
+    const client = new Client();
+    await new Promise<void>(async (resolve, reject) => {
+      client.on("ready", () => {
+        this.connected.set(key, true);
+        Logger.log(
+          `Successfully connected to SSH server [${key}] ${config.host}:${config.port}`
+        );
         resolve();
       });
-
-      this.client.on("error", initialErrorHandler);
-
-      this.client.on("close", () => {
-        this.connected = false;
-        Logger.log("SSH connection closed", "info");
-        // If the disconnection was not intentional, start the reconnect process.
-        if (!this.manualDisconnect) {
-          this.scheduleReconnect();
-        }
+      client.on("error", (err: Error) => {
+        this.connected.set(key, false);
+        reject(new Error(`SSH connection [${key}] failed: ${err.message}`));
       });
-
+      client.on("close", () => {
+        this.connected.set(key, false);
+        Logger.log(`SSH connection [${key}] closed`, "info");
+      });
       const sshConfig: any = {
         host: config.host,
         port: config.port,
@@ -99,29 +97,96 @@ export class SSHConnectionManager {
         keepaliveInterval: 30000, // Keep-alive packet every 30 seconds
         keepaliveCountMax: 3,     // Disconnect after 3 failed keep-alives
       };
+      // Add SOCKS proxy configuration if provided
+      if (config.socksProxy) {
+        try {
+          // Parse SOCKS proxy URL
+          const proxyUrl = new URL(config.socksProxy);
+          const proxyHost = proxyUrl.hostname;
+          const proxyPort = parseInt(proxyUrl.port, 10);
 
-      // Configure authentication method: using private key or password
+          Logger.log(
+            `Using SOCKS proxy for [${key}]: ${config.socksProxy}`,
+            "info"
+          );
+
+          // Create SOCKS connection
+          const { socket } = await SocksClient.createConnection({
+            proxy: {
+              host: proxyHost,
+              port: proxyPort,
+              type: 5,
+            },
+            command: "connect",
+            destination: {
+              host: config.host,
+              port: config.port,
+            },
+          });
+
+          // Set the socket as the sock for SSH connection
+          sshConfig.sock = socket;
+          Logger.log(
+            `SSH config object with SOCKS proxy: ${JSON.stringify(
+              sshConfig,
+              (k, v) => (k === "sock" ? "[Socket object]" : v)
+            )}`,
+            "info"
+          );
+        } catch (err) {
+          return reject(
+            new Error(
+              `Failed to create SOCKS proxy connection for [${key}]: ${
+                (err as Error).message
+              }`
+            )
+          );
+        }
+      }
       if (config.privateKey) {
         try {
           sshConfig.privateKey = fs.readFileSync(config.privateKey, "utf8");
           if (config.passphrase) {
             sshConfig.passphrase = config.passphrase;
           }
-          Logger.log("Using SSH private key authentication", "info");
+          Logger.log(
+            `Using SSH private key authentication for [${key}]`,
+            "info"
+          );
         } catch (err) {
           return reject(
-            new Error(`Failed to read private key file: ${(err as Error).message}`)
+            new Error(
+              `Failed to read private key file for [${key}]: ${
+                (err as Error).message
+              }`
+            )
           );
         }
       } else if (config.password) {
         sshConfig.password = config.password;
-        Logger.log("Using password authentication", "info");
+        Logger.log(`Using password authentication for [${key}]`, "info");
       } else {
-        return reject(new Error("No valid authentication method provided (password or private key)"));
+        return reject(
+          new Error(
+            `No valid authentication method provided for [${key}] (password or private key)`
+          )
+        );
       }
-
-      this.client.connect(sshConfig);
+      client.connect(sshConfig);
     });
+    this.clients.set(key, client);
+  }
+
+  /**
+   * Get SSH Client with specified name
+   */
+  public getClient(name?: string): Client {
+    const key = name || this.defaultName;
+    const client = this.clients.get(key);
+    if (!client) {
+      throw new Error(`SSH client for '${key}' not connected`);
+    }
+    return client;
   }
 
   /**
@@ -153,105 +218,136 @@ export class SSHConnectionManager {
    * Ensure SSH client is connected
    * @private
    */
-  private async ensureConnected(): Promise<Client> {
-    if (!this.connected || !this.client) {
-      await this.connect();
+  private async ensureConnected(name?: string): Promise<Client> {
+    const key = name || this.defaultName;
+    if (!this.connected.get(key) || !this.clients.get(key)) {
+      await this.connect(key);
     }
-
-    if (!this.client) {
-      throw new Error("SSH client not initialized");
+    const client = this.clients.get(key);
+    if (!client) {
+      throw new Error(`SSH client for '${key}' not initialized`);
     }
-
-    return this.client;
+    return client;
   }
 
-  /**
-   * Validate if command is allowed to execute
-   * @param command Command to execute
-   * @returns Validation result object
-   */
-  private validateCommand(command: string): { isAllowed: boolean; reason?: string } {
-    if (!this.config) {
-      throw new Error("SSH configuration not set");
+  private validateCommand(
+    command: string,
+    name?: string
+  ): { isAllowed: boolean; reason?: string } {
+    // Prevent command chaining
+    if (/[;&|]/.test(command)) {
+      return {
+        isAllowed: false,
+        reason: "Command chaining is not allowed.",
+      };
     }
 
+    const config = this.getConfig(name);
     // Check whitelist (if whitelist is configured, command must match one of the patterns to be allowed)
-    if (this.config.commandWhitelist && this.config.commandWhitelist.length > 0) {
-      const matchesWhitelist = this.config.commandWhitelist.some(pattern => {
+    if (config.commandWhitelist && config.commandWhitelist.length > 0) {
+      const matchesWhitelist = config.commandWhitelist.some((pattern) => {
         const regex = new RegExp(pattern);
         return regex.test(command);
       });
-
       if (!matchesWhitelist) {
         return {
           isAllowed: false,
-          reason: "Command not in whitelist, execution forbidden"
+          reason: "Command not in whitelist, execution forbidden",
         };
       }
     }
-
     // Check blacklist (if command matches any pattern in blacklist, execution is forbidden)
-    if (this.config.commandBlacklist && this.config.commandBlacklist.length > 0) {
-      const matchesBlacklist = this.config.commandBlacklist.some(pattern => {
+    if (config.commandBlacklist && config.commandBlacklist.length > 0) {
+      const matchesBlacklist = config.commandBlacklist.some((pattern) => {
         const regex = new RegExp(pattern);
         return regex.test(command);
       });
-
       if (matchesBlacklist) {
         return {
           isAllowed: false,
-          reason: "Command matches blacklist, execution forbidden"
+          reason: "Command matches blacklist, execution forbidden",
         };
       }
     }
-
     // Validation passed
     return {
-      isAllowed: true
+      isAllowed: true,
     };
   }
 
   /**
    * Execute SSH command
    */
-  public async executeCommand(cmdString: string): Promise<string> {
-    // Validate command
-    const validationResult = this.validateCommand(cmdString);
+  public async executeCommand(
+    cmdString: string,
+    name?: string,
+    options: { timeout?: number } = {}
+  ): Promise<string> {
+    // Validate command input and security
+    const validationResult = this.validateCommand(cmdString, name);
     if (!validationResult.isAllowed) {
       throw new Error(`Command validation failed: ${validationResult.reason}`);
     }
 
-    const client = await this.ensureConnected();
+    // Ensure SSH connection is established
+    const client = await this.ensureConnected(name);
+
+    // Configure execution options with defaults
+    const timeout = options.timeout || 30000; // Default 30 seconds timeout
 
     return new Promise<string>((resolve, reject) => {
+      let timeoutId: NodeJS.Timeout;
+
+      // Cleanup function to clear timeout and prevent memory leaks
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      };
+
+      // Execute command via SSH exec
       client.exec(
         cmdString,
         (err: Error | undefined, stream: ClientChannel) => {
+          // Handle immediate execution errors
           if (err) {
-            return reject(new Error(`Command execution error: ${err.message}`));
+            cleanup();
+            reject(new Error(`Command execution error: ${err.message}`));
+            return;
           }
 
+          // Initialize data buffers for stdout and stderr
           let data = "";
           let errorData = "";
 
-          stream.on("data", (chunk: Buffer) => (data += chunk.toString()));
+          // Set up event listeners for command output streams
+          stream.on("data", (chunk: Buffer) => (data += chunk.toString())); // Collect stdout data
           stream.stderr.on(
             "data",
-            (chunk: Buffer) => (errorData += chunk.toString())
+            (chunk: Buffer) => (errorData += chunk.toString()) // Collect stderr data
           );
 
+          // Handle command completion and exit code
           stream.on("close", (code: number) => {
-            if (code !== 0) {
-              return reject(
-                new Error(`Command execution failed, exit code: ${code}, error: ${errorData}`)
-              );
-            }
+            cleanup();
             resolve(data);
           });
 
+          // Handle stream errors during execution
           stream.on("error", (err: Error) => {
+            cleanup();
             reject(new Error(`Stream error: ${err.message}`));
           });
+
+          // Set timeout for command execution
+          timeoutId = setTimeout(() => {
+            try {
+              // Try to gracefully close the stream first
+              stream.close();
+            } catch (e) {
+              // Ignore errors when closing streams during timeout
+            }
+          }, timeout);
         }
       );
     });
@@ -260,8 +356,27 @@ export class SSHConnectionManager {
   /**
    * Upload file
    */
-  public async upload(localPath: string, remotePath: string): Promise<string> {
-    const client = await this.ensureConnected();
+  private validateLocalPath(localPath: string): string {
+    const resolvedPath = path.resolve(localPath);
+    const workingDir = process.cwd();
+    if (!resolvedPath.startsWith(workingDir)) {
+      throw new Error(
+        `Path traversal detected. Local path must be within the working directory.`
+      );
+    }
+    return resolvedPath;
+  }
+
+  /**
+   * Upload file
+   */
+  public async upload(
+    localPath: string,
+    remotePath: string,
+    name?: string
+  ): Promise<string> {
+    const validatedLocalPath = this.validateLocalPath(localPath);
+    const client = await this.ensureConnected(name);
 
     return new Promise<string>((resolve, reject) => {
       client.sftp((err: Error | undefined, sftp: SFTPWrapper) => {
@@ -269,18 +384,29 @@ export class SSHConnectionManager {
           return reject(new Error(`SFTP connection failed: ${err.message}`));
         }
 
-        const readStream = fs.createReadStream(localPath);
+        const readStream = fs.createReadStream(validatedLocalPath);
         const writeStream = sftp.createWriteStream(remotePath);
 
-        readStream.pipe(writeStream);
-        
-        readStream.on("end", () => {
+        const cleanup = () => {
+          sftp.end();
+        };
+
+        writeStream.on("close", () => {
+          cleanup();
           resolve("File uploaded successfully");
         });
 
-        readStream.on("error", (err: Error) => {
+        writeStream.on("error", (err: Error) => {
+          cleanup();
           reject(new Error(`File upload failed: ${err.message}`));
         });
+
+        readStream.on("error", (err: Error) => {
+          cleanup();
+          reject(new Error(`Failed to read local file: ${err.message}`));
+        });
+
+        readStream.pipe(writeStream);
       });
     });
   }
@@ -288,8 +414,13 @@ export class SSHConnectionManager {
   /**
    * Download file
    */
-  public async download(remotePath: string, localPath: string): Promise<string> {
-    const client = await this.ensureConnected();
+  public async download(
+    remotePath: string,
+    localPath: string,
+    name?: string
+  ): Promise<string> {
+    const validatedLocalPath = this.validateLocalPath(localPath);
+    const client = await this.ensureConnected(name);
 
     return new Promise<string>((resolve, reject) => {
       client.sftp((err: Error | undefined, sftp: SFTPWrapper) => {
@@ -298,21 +429,28 @@ export class SSHConnectionManager {
         }
 
         const readStream = sftp.createReadStream(remotePath);
-        const writeStream = fs.createWriteStream(localPath);
+        const writeStream = fs.createWriteStream(validatedLocalPath);
 
-        readStream.pipe(writeStream);
-        
+        const cleanup = () => {
+          sftp.end();
+        };
+
         writeStream.on("finish", () => {
+          cleanup();
           resolve("File downloaded successfully");
         });
 
+        writeStream.on("error", (err: Error) => {
+          cleanup();
+          reject(new Error(`Failed to save file: ${err.message}`));
+        });
+
         readStream.on("error", (err: Error) => {
+          cleanup();
           reject(new Error(`File download failed: ${err.message}`));
         });
 
-        writeStream.on("error", (err: Error) => {
-          reject(new Error(`Failed to save file: ${err.message}`));
-        });
+        readStream.pipe(writeStream);
       });
     });
   }
@@ -321,11 +459,33 @@ export class SSHConnectionManager {
    * Disconnect SSH connection
    */
   public disconnect(): void {
-    if (this.client) {
-      this.manualDisconnect = true; // Set flag to prevent reconnection
-      this.client.end();
-      this.client = null;
-      this.connected = false;
+    if (this.clients.size > 0) {
+      for (const client of this.clients.values()) {
+        client.end();
+      }
+      this.clients.clear();
     }
+  }
+
+  /**
+   * Get basic information of all configured servers
+   */
+  public getAllServerInfos(): Array<{
+    name: string;
+    host: string;
+    port: number;
+    username: string;
+    connected: boolean;
+  }> {
+    return Object.keys(this.configs).map((key) => {
+      const config = this.configs[key];
+      return {
+        name: key,
+        host: config.host,
+        port: config.port,
+        username: config.username,
+        connected: this.connected.get(key) === true,
+      };
+    });
   }
 }

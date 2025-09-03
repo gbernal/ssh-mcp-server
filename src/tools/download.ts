@@ -15,10 +15,11 @@ export function registerDownloadTool(server: McpServer): void {
     {
       remotePath: z.string().describe("Remote path"),
       localPath: z.string().describe("Local path"),
+      connectionName: z.string().optional().describe("SSH connection name (optional, default is 'default')"),
     },
-    async ({ remotePath, localPath }) => {
+    async ({ remotePath, localPath, connectionName }) => {
       try {
-        const result = await sshManager.download(remotePath, localPath);
+        const result = await sshManager.download(remotePath, localPath, connectionName);
         return {
           content: [{ type: "text", text: result }],
         };

@@ -14,15 +14,35 @@ export function registerExecuteCommandTool(server: McpServer): void {
     "Execute command on connected server and get output result",
     {
       cmdString: z.string().describe("Command to execute"),
+      connectionName: z
+        .string()
+        .optional()
+        .describe("SSH connection name (optional, default is 'default')"),
+      timeout: z
+        .number()
+        .optional()
+        .describe(
+          "Command execution timeout in milliseconds (optional, default is 30000ms)"
+        ),
+
     },
-    async ({ cmdString }) => {
+    async ({ cmdString, connectionName, timeout }) => {
       try {
-        const result = await sshManager.executeCommand(cmdString);
+        const result = await sshManager.executeCommand(
+          cmdString,
+          connectionName,
+          {
+            timeout,
+          }
+        );
         return {
           content: [{ type: "text", text: result }],
         };
       } catch (error: unknown) {
-        const errorMessage = Logger.handleError(error, "Failed to execute command");
+        const errorMessage = Logger.handleError(
+          error,
+          "Failed to execute command"
+        );
         return {
           content: [{ type: "text", text: errorMessage }],
           isError: true,
