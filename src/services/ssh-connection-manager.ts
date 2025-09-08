@@ -60,17 +60,35 @@ export class SSHConnectionManager {
     this.manualDisconnect = false; // Reset flag on new connection attempt
     this.client = new Client();
 
+    // Debug log SSH config (excluding sensitive info)
+    Logger.log(
+      `Connecting with config: ${JSON.stringify({
+        host: config.host,
+        port: config.port,
+        username: config.username,
+        privateKey: !!config.privateKey,
+        password: !!config.password,
+        passphrase: !!config.passphrase
+      })}`,
+      "debug"
+    );
+
     await new Promise<void>((resolve, reject) => {
       if (!this.client) {
         return reject(new Error("SSH client not initialized"));
       }
 
       const initialErrorHandler = (err: Error) => {
-          // Only reject the promise for the very first connection attempt.
-          // Subsequent reconnection errors will be handled by the 'close' event.
-          if (this.reconnectAttempts === 0) {
-            reject(new Error(`SSH connection failed: ${err.message}`));
-          }
+        // Log full error details
+        Logger.log(
+          `SSH connection failed: ${err.message}\nStack: ${err.stack}`,
+          "error"
+        );
+        // Only reject the promise for the very first connection attempt.
+        // Subsequent reconnection errors will be handled by the 'close' event.
+        if (this.reconnectAttempts === 0) {
+          reject(new Error(`SSH connection failed: ${err.message}`));
+        }
       };
 
       this.client.on("ready", () => {
@@ -109,6 +127,10 @@ export class SSHConnectionManager {
           }
           Logger.log("Using SSH private key authentication", "info");
         } catch (err) {
+          Logger.log(
+            `Failed to read private key file: ${(err as Error).message}\nStack: ${(err as Error).stack}`,
+            "error"
+          );
           return reject(
             new Error(`Failed to read private key file: ${(err as Error).message}`)
           );
@@ -117,6 +139,7 @@ export class SSHConnectionManager {
         sshConfig.password = config.password;
         Logger.log("Using password authentication", "info");
       } else {
+        Logger.log("No valid authentication method provided (password or private key)", "error");
         return reject(new Error("No valid authentication method provided (password or private key)"));
       }
 
